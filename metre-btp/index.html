@@ -109,6 +109,8 @@ main p{color:var(--muted);margin:6px 0 0}
 .sel-bar .sm:hover{border-color:var(--accent);color:var(--accent)}
 .recap-list .ctr{width:96px;accent-color:var(--accent);cursor:ew-resize;margin:0}
 .recap-list .ctr[hidden],.ctr-l[hidden]{display:none}
+.mk{display:inline-flex;align-items:center;gap:6px;flex:1;min-width:0;color:var(--ink);cursor:pointer}
+.mk input{accent-color:var(--accent);margin:0}
 .ctr-l{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:12px}
 .recap-list .tools{display:flex;align-items:center;gap:6px}
 .recap-list .tools .sm{padding:2px 8px;font-size:11.5px}
@@ -405,7 +407,7 @@ body.noscroll{overflow:hidden}
             <button class="sm leg2-pick"></button><button class="sm leg2-clear" hidden>Effacer</button></div>
           <div class="use-body"><div class="use-crop"></div>
             <div class="use-sel" hidden><div class="sub-h"><b>Sélection des zones</b><span class="use-info"></span></div>
-              <div class="sel-bar"><span class="sel-info">Cochez des lignes pour les grouper.</span><button class="sm use-merge primary-sm" hidden title="Regrouper les lignes cochées en une seule">Grouper</button></div>
+              <div class="sel-bar"><label class="mk" title="Le marquage (traits blancs, noirs ou gris, et lignes de légende nommées « marquage » ou « signalisation ») posé sur une surface est compté dans cette surface"><input type="checkbox" class="use-mark"> Compter le marquage dans les surfaces</label><span class="sel-info"></span><button class="sm use-merge primary-sm" hidden title="Regrouper les lignes cochées en une seule">Grouper</button></div>
               <ul class="recap-list use-list"></ul></div></div>
         </div>`;
       box.querySelector('.del').onclick=async()=>{await delPlan(r.id).catch(()=>{});renderPlans()};
@@ -484,7 +486,12 @@ body.noscroll{overflow:hidden}
     /* Légende validée : extrait à gauche, sélection des zones à droite.
        Une ligne par pastille de la légende retrouvée sur le plan, dans l'ordre de la légende ;
        cocher une ligne revient à cocher la ligne correspondante du récapitulatif. */
-    const useBody=box.querySelector('.use-body'),useSel=box.querySelector('.use-sel'),useList=box.querySelector('.use-list'),useInfo=box.querySelector('.use-info'),useMerge=box.querySelector('.use-merge');
+    const useBody=box.querySelector('.use-body'),useSel=box.querySelector('.use-sel'),useList=box.querySelector('.use-list'),useInfo=box.querySelector('.use-info'),useMerge=box.querySelector('.use-merge'),useMark=box.querySelector('.use-mark');
+    useMark.onchange=()=>{r.marquage=useMark.checked;addPlan(r).catch(()=>{});recap(true)};
+    // Couleurs de marquage : libellé (couleur ou groupe) contenant marquage / signalisation
+    const MARK=/marquage|signali|passage pieton|zebra/;
+    const isMark=c=>MARK.test(norm((r.labels||{})[c.key]??c.legendText??''))
+      ||(r.groups||[]).some(g=>g.keys.includes(c.key)&&MARK.test(norm((r.labels||{})['g:'+g.id]??'')));
     let holdUse=false;   // pendant le réglage du contraste : ne pas reconstruire la liste (le curseur perdrait la main)
     function buildUse(){
       if(holdUse)return;
@@ -526,6 +533,7 @@ body.noscroll{overflow:hidden}
       });
       const n=rows.filter(it=>(r.selected||[]).includes(it.key)).length;
       useInfo.textContent=n+' / '+rows.length+' sélectionnée'+(n>1?'s':'');
+      useMark.checked=!!r.marquage;
       // Grouper : uniquement les lignes cochées de cette liste
       useMerge.hidden=n<2;useMerge.onclick=()=>merge(rows.filter(it=>(r.selected||[]).includes(it.key)));
     }
@@ -541,6 +549,7 @@ body.noscroll{overflow:hidden}
         const res=analyzeColors(src.canvas,[r.legend2&&r.legend2.ok&&{...r.legend2,tag:'use'},r.legend].filter(Boolean),src.texts);
         if(my!==rtok)return;
         found=res;ptPx=src.ptPerPx||null;detected=detectScale(src.texts);showScale();
+        if(r.marquage)fillMarking(res,isMark,mPerPx());
         if(!res.length){rl.innerHTML='<li class="msg">Aucune surface colorée détectée sur cette page.</li>';items=[];applySel(true);return}
         buildList();
       }catch(e){if(my===rtok)rl.innerHTML='<li class="msg">Analyse impossible pour ce plan.</li>'}
@@ -585,7 +594,9 @@ body.noscroll{overflow:hidden}
       it.li.querySelectorAll('.seg button').forEach(b=>b.classList.toggle('on',b.dataset.k===k));
       const q=it.li.querySelector('.qty'),w=it.li.querySelector('.why');
       if(!p.mpp)q.textContent='';
-      else if(k==='m2'){const v=p.A*p.mpp*p.mpp;q.textContent='≈ '+fmt(v,v<10?2:1)+' m²'}
+      else if(k==='m2'){const v=p.A*p.mpp*p.mpp;q.textContent='≈ '+fmt(v,v<10?2:1)+' m²';
+        const mk=r.marquage?it.members.reduce((s,c)=>s+(c.markAdd||0),0)*p.mpp*p.mpp:0;
+        if(mk>=.05)q.textContent+=' (dont '+fmt(mk,mk<10?2:1)+' m² de marquage)'}
       else{const v=p.P/2*p.mpp;q.textContent='≈ '+fmt(v,v<10?2:1)+' ml'}
       w.textContent=k===p.auto?p.why:'choisi manuellement';
       q.title=p.mpp?'Estimation à partir de l\'aperçu analysé : à vérifier par un métré précis':'';
@@ -746,8 +757,8 @@ body.noscroll{overflow:hidden}
       for(let y=0;y<H;y++){
         const Z=rowZ(y);
         for(let x=0;x<W;x++){
-          if(Z.length&&inZ(Z,x))continue;
-          const p=y*W+x,i=p*4;if(d[i+3]<128)continue;
+          const p=y*W+x,i=p*4;
+          if(Z.length&&inZ(Z,x)||d[i+3]<128){lab[p]=-2;continue}   // -2 : légende ou transparent, -1 : blanc/noir/gris
           const R=d[i],G=d[i+1],B=d[i+2];
           if(Math.max(R,G,B)-Math.min(R,G,B)<24)continue;
           let best=-1,bd=2304;
@@ -760,7 +771,8 @@ body.noscroll{overflow:hidden}
         if(x===0||lab[p-1]!==j)per[j]++;if(x===W-1||lab[p+1]!==j)per[j]++;
         if(y===0||lab[p-W]!==j)per[j]++;if(y===H-1||lab[p+W]!==j)per[j]++;
       }
-      res.forEach((c,j)=>{c.area=area[j];c.per=per[j]*Math.PI/4});   // contour en escalier → longueur réelle
+      res.forEach((c,j)=>{c.j=j;c.area=area[j];c.per=per[j]*Math.PI/4});   // contour en escalier → longueur réelle
+      Object.defineProperty(res,'px',{value:{lab,W,H}});
     }
     // Pastille de chaque couleur dans la légende → texte écrit à sa droite
     if(texts&&texts.length)for(const L of Ls){
@@ -786,6 +798,25 @@ body.noscroll{overflow:hidden}
       });
     }
     return res.sort((a,b)=>b.n-a.n);
+  }
+  /* Marquage compté dans les surfaces : chaque pixel de marquage (traits blancs/noirs/gris, ou couleur
+     désignée comme marquage) pris entre deux pixels d'une même surface, à gauche/droite ou en haut/en bas
+     à moins de R pixels, est ajouté à cette surface et retiré de la surface du marquage. */
+  function fillMarking(res,isMark,mpp){
+    const px=res.px;if(!px)return;
+    // portée : 1,5 m de part et d'autre si l'échelle est connue, sinon 2,5 % de la page
+    const {lab,W,H}=px,R=Math.min(120,Math.max(4,Math.round(mpp?1.5/mpp:Math.max(W,H)*.025)));
+    const byJ=[];res.forEach(c=>{byJ[c.j]=c;c.markAdd=0;c.markOut=0});
+    const mark=byJ.map(c=>!!c&&isMark(c));
+    const surf=j=>j>=0&&!mark[j];
+    const seek=(p,step,lim)=>{for(let k=1,q=p+step;k<=R&&k<=lim;k++,q+=step){const j=lab[q];if(j===-2)return -9;if(surf(j))return j}return -9};
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+      const p=y*W+x,j=lab[p];
+      if(!(j===-1||(j>=0&&mark[j])))continue;
+      let t=seek(p,-1,x);if(t<0||t!==seek(p,1,W-1-x)){t=seek(p,-W,y);if(t<0||t!==seek(p,W,H-1-y))continue}
+      byJ[t].markAdd++;if(j>=0)byJ[j].markOut++;
+    }
+    res.forEach(c=>{c.area+=c.markAdd-c.markOut});
   }
   // Échelle écrite sur le plan (« Échelle : 1/200 », « Ech. 1:500 », sinon un « 1/200 » isolé)
   function detectScale(texts){
