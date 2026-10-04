@@ -579,18 +579,42 @@ body.noscroll{overflow:hidden}
         mem.forEach(c=>grouped.add(c.key));
         items.push({key:'g:'+g.id,group:g,members:mem,auto:mem.map(c=>c.legendText||colorName(c.rgb)).join(' + ')});
       });
-      found.forEach(c=>{if(!grouped.has(c.key))items.push({key:c.key,members:[c],auto:c.legendText||colorName(c.rgb),fromLegend:!!c.legendText})});
+      /* Regroupement automatique d'après la légende sélectionnée : les couleurs qui portent le même
+         libellé forment une ligne, et les variantes proches sans libellé (transparence, bordure,
+         anticrénelage) rejoignent la couleur de légende la plus proche. « Séparer » le désactive (r.autoOff). */
+      r.autoOff=r.autoOff||[];
+      const tnorm=s=>s.toLowerCase().replace(/\s+/g,' ').trim();
+      const free=found.filter(c=>!grouped.has(c.key));
+      const named=free.filter(c=>c.legendText&&!r.autoOff.includes(tnorm(c.legendText)));
+      const tagOf=new Map(named.map(c=>[c.key,tnorm(c.legendText)]));
+      if(named.length)free.forEach(c=>{
+        if(c.legendText)return;
+        let best=null,bd=64;named.forEach(n=>{const dd=dist(n.rgb,c.rgb);if(dd<bd){bd=dd;best=n}});
+        if(best)tagOf.set(c.key,tagOf.get(best.key));
+      });
+      const byTag=new Map();free.forEach(c=>{const t=tagOf.get(c.key);if(t)byTag.set(t,[...(byTag.get(t)||[]),c])});
+      const done=new Set();
+      free.forEach(c=>{
+        const t=tagOf.get(c.key),mem=t&&byTag.get(t);
+        if(!mem||mem.length<2){items.push({key:c.key,members:[c],auto:c.legendText||colorName(c.rgb),fromLegend:!!c.legendText});return}
+        if(done.has(t))return;done.add(t);
+        const key='a:'+t,lead=mem.find(m=>m.legendText);
+        // reprend la sélection et le libellé posés auparavant sur les couleurs isolées
+        if(mem.some(m=>r.selected.includes(m.key))){r.selected=r.selected.filter(k=>!mem.some(m=>m.key===k));if(!r.selected.includes(key))r.selected.push(key)}
+        if(r.labels[key]==null){const l=mem.map(m=>r.labels[m.key]).find(Boolean);if(l)r.labels[key]=l}
+        items.push({key,autoTag:t,members:mem,auto:lead.legendText,fromLegend:true});
+      });
       rl.innerHTML='';
       items.forEach(it=>{
         const li=document.createElement('li');
         const on=r.selected.includes(it.key);
-        li.className=(on?'on':'')+(it.group?' grp':'');
+        li.className=(on?'on':'')+(it.group||it.autoTag?' grp':'');
         li.innerHTML=`<input type="checkbox" class="pick"${on?' checked':''} aria-label="Sélectionner">
           <span class="sws">${it.members.map(c=>`<span class="sw" style="background:rgb(${c.rgb.join(',')})"></span>`).join('')}</span>
-          <input class="lab" value="${esc(r.labels[it.key]??it.auto)}" aria-label="Libellé" title="${it.group?'Groupe fusionné':it.fromLegend?'Libellé lu dans la légende':'Libellé à compléter'}">
+          <input class="lab" value="${esc(r.labels[it.key]??it.auto)}" aria-label="Libellé" title="${it.group?'Groupe fusionné':it.autoTag?'Couleurs regroupées d\'après la légende':it.fromLegend?'Libellé lu dans la légende':'Libellé à compléter'}">
           <span class="tools">
             <input type="range" class="ctr" min="-100" max="100" step="5" value="${(r.contrast||{})[it.key]||0}" title="Contraste sur l'aperçu (double-clic : réinitialiser)" aria-label="Contraste"${on?'':' hidden'}>
-            ${it.group?'<button class="sm split" title="Séparer ce groupe en couleurs individuelles">Séparer</button>':''}
+            ${it.group||it.autoTag?'<button class="sm split" title="Séparer ce groupe en couleurs individuelles">Séparer</button>':''}
           </span>
           <div class="prop"><span class="seg" role="group" aria-label="Type de mesure"><button data-k="m2" title="Mesure en surface (m²)">Surface</button><button data-k="ml" title="Mesure en linéaire (ml)">Linéaire</button></span><span class="qty"></span><span class="why"></span></div>`;
         it.li=li;
@@ -610,10 +634,10 @@ body.noscroll{overflow:hidden}
         li.querySelector('.sws').onclick=()=>{cb2.checked=!cb2.checked;cb2.onchange()};
         const sp=li.querySelector('.split');
         if(sp)sp.onclick=()=>{
-          r.groups=r.groups.filter(g=>g!==it.group);
+          if(it.group)r.groups=r.groups.filter(g=>g!==it.group);else r.autoOff.push(it.autoTag);
           const was=r.selected.includes(it.key);
           r.selected=r.selected.filter(k=>k!==it.key);
-          if(was)it.group.keys.forEach(k=>{if(!r.selected.includes(k))r.selected.push(k)});   // les couleurs restent sélectionnées
+          if(was)(it.group?it.group.keys:it.members.map(c=>c.key)).forEach(k=>{if(!r.selected.includes(k))r.selected.push(k)});   // les couleurs restent sélectionnées
           delete r.labels[it.key];if(r.contrast)delete r.contrast[it.key];if(r.measure)delete r.measure[it.key];
           addPlan(r).catch(()=>{});buildList();
         };
