@@ -730,7 +730,7 @@ body.noscroll{overflow:hidden}
       // Contraste par ligne : curseur -100…+100 → facteur 0,2…3 par rapport au fond blanc
       const fac=k=>{const v=(r.contrast||{})[k]||0;return v>=0?1+v/50:1+v/125};
       const sel=items.filter(it=>r.selected.includes(it.key));
-      const cols=sel.flatMap(it=>it.members.map(c=>({rgb:c.rgb,f:fac(it.key)})));
+      const cols=sel.flatMap(it=>it.members.flatMap(c=>(c.rgbs||[c.rgb]).map(rgb=>({rgb,f:fac(it.key)}))));
       const n=sel.length;
       selInfo.textContent=n?n+(n>1?' lignes sélectionnées':' ligne sélectionnée'):'Aucune sélection';
       selNone.hidden=!n;selAll.hidden=!items.length||n===items.length;mergeBtn.hidden=n<2;
@@ -792,13 +792,84 @@ body.noscroll{overflow:hidden}
     return {render};
   }
 
-  /* ---- Analyse des couleurs d'une page (non pivotée) ---- */
+  const chroma=(R,G,B)=>Math.max(R,G,B)-Math.min(R,G,B)>=24;   // sinon blanc, noir, gris (traits, fond, texte)
+  /* Lignes d'une zone de légende : chaque pastille de couleur et le libellé écrit à sa droite forment une ligne.
+     Renvoie [{text, cols:[[r,g,b]…] (couleurs de la pastille), pos:[y,x]}]. */
+  function legendEntries(d,W,H,L,texts){
+    const zx0=Math.max(0,L.x0|0),zx1=Math.min(W,Math.ceil(L.x1)),zy0=Math.max(0,L.y0|0),zy1=Math.min(H,Math.ceil(L.y1));
+    const zw=zx1-zx0,zh=zy1-zy0;if(zw<2||zh<2)return [];
+    // pastilles : taches de couleur (composantes connexes), réunies quand elles se touchent (remplissage + bordure, hachures)
+    const seen=new Uint8Array(zw*zh),blobs=[];
+    const on=(x,y)=>{const i=(y*W+x)*4;return d[i+3]>=128&&chroma(d[i],d[i+1],d[i+2])};
+    for(let y=zy0;y<zy1;y++)for(let x=zx0;x<zx1;x++){
+      const s=(y-zy0)*zw+(x-zx0);if(seen[s]||!on(x,y))continue;
+      const b={x0:x,x1:x,y0:y,y1:y,pix:[]},st=[s];seen[s]=1;
+      while(st.length){const q=st.pop(),qx=q%zw+zx0,qy=(q/zw|0)+zy0,i=(qy*W+qx)*4;
+        b.pix.push([d[i],d[i+1],d[i+2]]);if(qx<b.x0)b.x0=qx;if(qx>b.x1)b.x1=qx;if(qy<b.y0)b.y0=qy;if(qy>b.y1)b.y1=qy;
+        for(const [nx,ny] of [[qx-1,qy],[qx+1,qy],[qx,qy-1],[qx,qy+1]]){
+          if(nx<zx0||nx>=zx1||ny<zy0||ny>=zy1)continue;const n=(ny-zy0)*zw+(nx-zx0);
+          if(!seen[n]&&on(nx,ny)){seen[n]=1;st.push(n)}}}
+      blobs.push(b);
+    }
+    for(let merged=true;merged;){merged=false;
+      for(let a=0;a<blobs.length&&!merged;a++)for(let c=a+1;c<blobs.length;c++){const A=blobs[a],B=blobs[c];
+        if(A.x0-2<=B.x1&&B.x0-2<=A.x1&&A.y0-2<=B.y1&&B.y0-2<=A.y1){
+          A.x0=Math.min(A.x0,B.x0);A.x1=Math.max(A.x1,B.x1);A.y0=Math.min(A.y0,B.y0);A.y1=Math.max(A.y1,B.y1);
+          A.pix=A.pix.concat(B.pix);blobs.splice(c,1);merged=true;break}}}
+    const sw=blobs.filter(b=>b.pix.length>=12);
+    // textes de la zone, regroupés en lignes
+    const T=texts.map(t=>({s:t.s,x0:t.x*W,x1:(t.x+t.w)*W,y0:t.y*H,y1:(t.y+t.h)*H}))
+      .filter(t=>t.s.trim()&&t.x0>=L.x0-2&&t.x1<=L.x1+2&&t.y1>=L.y0&&t.y0<=L.y1)
+      .sort((a,b)=>(a.y0+a.y1)-(b.y0+b.y1));
+    const lines=[];
+    T.forEach(t=>{const yc=(t.y0+t.y1)/2,h=t.y1-t.y0;
+      const ln=lines.find(l=>Math.abs(l.yc-yc)<Math.max(l.h,h)*.5);
+      if(ln){ln.ts.push(t);ln.y0=Math.min(ln.y0,t.y0);ln.y1=Math.max(ln.y1,t.y1);ln.yc=(ln.y0+ln.y1)/2}else lines.push({yc,h,y0:t.y0,y1:t.y1,ts:[t]})});
+    lines.forEach(l=>l.ts.sort((a,b)=>a.x0-b.x0));
+    // libellé d'une pastille : la ligne de texte la plus proche de son centre, juste à sa droite
+    const used=new Set(),out=[];
+    sw.map(b=>{
+      const yc=(b.y0+b.y1)/2,bh=b.y1-b.y0+1;let best=null,bd=1e9;
+      lines.forEach(l=>{if(Math.abs(l.yc-yc)>Math.max(bh,l.h)*.75)return;
+        const t=l.ts.find(t=>t.x0>=b.x1-2);if(!t||t.x0-b.x1>Math.max(bh*4,l.h*6))return;
+        const dd=Math.abs(l.yc-yc)+(t.x0-b.x1)*.1;if(dd<bd){bd=dd;best={l,t}}});
+      return best&&{b,...best};
+    }).filter(Boolean).sort((a,b)=>a.b.y0-b.b.y0||a.b.x0-b.b.x0).forEach(({b,l,t})=>{
+      // texte jusqu'au prochain grand blanc ou à la pastille suivante sur la même ligne
+      const next=sw.filter(o=>o!==b&&o.x0>b.x1&&o.y1>=l.y0&&o.y0<=l.y1).reduce((m,o)=>Math.min(m,o.x0),1e9);
+      let text='',end=null;
+      for(const u of l.ts){if(u.x0<t.x0||u.x0>=next)continue;if(end!=null&&u.x0-end>l.h*3)break;
+        text+=(end!=null&&u.x0-end>1?' ':'')+u.s;end=u.x1;used.add(u)}
+      // suite du libellé sur les lignes du dessous, alignée et sans pastille devant
+      let y1=l.y1;
+      for(const l2 of lines){if(l2.y0<y1-2||l2.y0-y1>l2.h*.8)continue;
+        const u=l2.ts.find(u=>Math.abs(u.x0-t.x0)<l.h&&!used.has(u));if(!u)continue;
+        if(sw.some(o=>o!==b&&o.x1<=u.x0+2&&u.x0-o.x1<l.h*6&&o.y1>=l2.y0&&o.y0<=l2.y1))continue;
+        text+=' '+u.s;used.add(u);y1=l2.y1}
+      text=text.replace(/\s+/g,' ').trim();if(!text)return;
+      const cl=[];
+      b.pix.forEach(p=>{const c=cl.find(c=>dist(c.m,p)<48);
+        if(c){c.n++;for(let q=0;q<3;q++){c.s[q]+=p[q];c.m[q]=c.s[q]/c.n}}else cl.push({n:1,s:[...p],m:[...p]})});
+      const cols=cl.filter(c=>c.n>=b.pix.length*.15).sort((a,b)=>b.n-a.n).map(c=>c.m.map(Math.round));
+      if(cols.length)out.push({text,cols,pos:[b.y0,b.x0]});
+    });
+    return out;
+  }
+  /* Analyse des couleurs d'une page (non pivotée).
+     Avec une légende lue : une ligne par ligne de légende, chaque pixel du plan allant à la pastille
+     la plus proche ; les autres couleurs du plan restent des lignes à part. */
   function analyzeColors(cv,legs,texts){
     const W=cv.width,H=cv.height,d=cv.getContext('2d',{willReadFrequently:true}).getImageData(0,0,W,H).data;
-    // Zones de légende (la première est prioritaire pour les libellés) : exclues des surfaces
+    // Zones de légende (la première est prioritaire) : exclues des surfaces
     const Ls=(legs||[]).map(g=>({tag:g.tag||'leg',x0:g.x*W,x1:(g.x+g.w)*W,y0:g.y*H,y1:(g.y+g.h)*H}));
     const rowZ=y=>Ls.filter(L=>y>=L.y0&&y<L.y1);
     const inZ=(Z,x)=>{for(const L of Z)if(x>=L.x0&&x<L.x1)return true;return false};
+    const ents=[];
+    if(texts&&texts.length)Ls.forEach(L=>legendEntries(d,W,H,L,texts).forEach(e=>{
+      if(ents.some(o=>o.tag!==L.tag&&o.text===e.text&&dist(o.cols[0],e.cols[0])<24))return;   // même ligne dans les deux zones
+      ents.push({...e,tag:L.tag})}));
+    const EC=[];ents.forEach((e,k)=>e.cols.forEach(rgb=>EC.push({rgb,k})));
+    const nearEnt=(R,G,B)=>{let best=-1,bd=2304;for(const c of EC){const dr=c.rgb[0]-R,dg=c.rgb[1]-G,db=c.rgb[2]-B,dd=dr*dr+dg*dg+db*db;if(dd<bd){bd=dd;best=c.k}}return best};
     const bins=new Map();let total=0;
     for(let y=0;y<H;y++){
       const Z=rowZ(y);
@@ -806,13 +877,14 @@ body.noscroll{overflow:hidden}
         if(Z.length&&inZ(Z,x))continue;                 // la légende ne compte pas dans les surfaces
         const i=(y*W+x)*4;if(d[i+3]<128)continue;
         const R=d[i],G=d[i+1],B=d[i+2];
-        if(Math.max(R,G,B)-Math.min(R,G,B)<24)continue; // blanc, noir, gris (traits, fond, texte)
+        if(!chroma(R,G,B))continue;
+        total++;if(EC.length&&nearEnt(R,G,B)>=0)continue;   // couleur d'une ligne de légende
         const k=(R>>4)<<8|(G>>4)<<4|(B>>4);
         let b=bins.get(k);if(!b){b={n:0,r:0,g:0,b:0};bins.set(k,b)}
-        b.n++;b.r+=R;b.g+=G;b.b+=B;total++;
+        b.n++;b.r+=R;b.g+=G;b.b+=B;
       }
     }
-    if(!total)return [];
+    if(!total&&!ents.length)return [];
     // Regroupe les teintes proches (anticrénelage, légères variations)
     const cl=[];
     [...bins.values()].sort((a,b)=>b.n-a.n).forEach(b=>{
@@ -820,56 +892,36 @@ body.noscroll{overflow:hidden}
       const c=cl.find(c=>dist(c.rgb,m)<48);
       if(c){c.r+=b.r;c.g+=b.g;c.b+=b.b;c.n+=b.n}else cl.push({n:b.n,r:b.r,g:b.g,b:b.b,rgb:m});
     });
-    let res=cl.map(c=>({n:c.n,rgb:[c.r/c.n,c.g/c.n,c.b/c.n].map(Math.round)}))
-      .filter(c=>c.n>=Math.max(total*0.01,150));
-    const kept=res.reduce((s,c)=>s+c.n,0);
-    res.forEach(c=>{c.pct=c.n/kept*100;c.key=c.rgb.map(v=>(v>>3).toString(16).padStart(2,'0')).join('')});
-    // Aire et périmètre (en pixels) de chaque couleur, pour les propositions de mesure
-    if(res.length&&res.length<128){
-      const lab=new Int8Array(W*H).fill(-1),area=new Float64Array(res.length),per=new Float64Array(res.length);
-      for(let y=0;y<H;y++){
-        const Z=rowZ(y);
-        for(let x=0;x<W;x++){
-          const p=y*W+x,i=p*4;
-          if(Z.length&&inZ(Z,x)||d[i+3]<128){lab[p]=-2;continue}   // -2 : légende ou transparent, -1 : blanc/noir/gris
-          const R=d[i],G=d[i+1],B=d[i+2];
-          if(Math.max(R,G,B)-Math.min(R,G,B)<24)continue;
-          let best=-1,bd=2304;
-          for(let j=0;j<res.length;j++){const c=res[j].rgb,dr=c[0]-R,dg=c[1]-G,db=c[2]-B,dd=dr*dr+dg*dg+db*db;if(dd<bd){bd=dd;best=j}}
-          if(best>=0){lab[p]=best;area[best]++}
-        }
+    const hex=rgb=>rgb.map(v=>(v>>3).toString(16).padStart(2,'0')).join('');
+    const E=ents.map(e=>({n:0,rgb:e.cols[0],rgbs:e.cols,legendText:e.text.slice(0,80),legendTag:e.tag,legendPos:e.pos}));
+    E.forEach((c,k)=>{c.key='L'+hex(c.rgb);if(E.slice(0,k).some(o=>o.key===c.key))c.key+='-'+k});
+    const C=cl.map(c=>({n:c.n,rgb:[c.r/c.n,c.g/c.n,c.b/c.n].map(Math.round)}))
+      .filter(c=>c.n>=Math.max(total*0.01,150)).slice(0,500);
+    C.forEach(c=>c.key=hex(c.rgb));
+    const res=[...E,...C],nE=E.length;
+    // Aire et périmètre (en pixels) de chaque ligne, pour les propositions de mesure
+    const lab=new Int16Array(W*H).fill(-1),area=new Float64Array(res.length),per=new Float64Array(res.length);
+    for(let y=0;y<H;y++){
+      const Z=rowZ(y);
+      for(let x=0;x<W;x++){
+        const p=y*W+x,i=p*4;
+        if(Z.length&&inZ(Z,x)||d[i+3]<128){lab[p]=-2;continue}   // -2 : légende ou transparent, -1 : blanc/noir/gris
+        const R=d[i],G=d[i+1],B=d[i+2];
+        if(!chroma(R,G,B))continue;
+        let best=EC.length?nearEnt(R,G,B):-1;
+        if(best<0){let bd=2304;for(let j=0;j<C.length;j++){const c=C[j].rgb,dr=c[0]-R,dg=c[1]-G,db=c[2]-B,dd=dr*dr+dg*dg+db*db;if(dd<bd){bd=dd;best=nE+j}}}
+        if(best>=0){lab[p]=best;area[best]++}
       }
-      for(let y=0;y<H;y++)for(let x=0;x<W;x++){
-        const p=y*W+x,j=lab[p];if(j<0)continue;
-        if(x===0||lab[p-1]!==j)per[j]++;if(x===W-1||lab[p+1]!==j)per[j]++;
-        if(y===0||lab[p-W]!==j)per[j]++;if(y===H-1||lab[p+W]!==j)per[j]++;
-      }
-      res.forEach((c,j)=>{c.j=j;c.area=area[j];c.per=per[j]*Math.PI/4});   // contour en escalier → longueur réelle
-      Object.defineProperty(res,'px',{value:{lab,W,H}});
     }
-    // Pastille de chaque couleur dans la légende → texte écrit à sa droite
-    if(texts&&texts.length)for(const L of Ls){
-      const bx=res.map(()=>({n:0,x0:1e9,y0:1e9,x1:-1,y1:-1}));
-      for(let y=Math.max(0,L.y0|0);y<Math.min(H,L.y1);y++)for(let x=Math.max(0,L.x0|0);x<Math.min(W,L.x1);x++){
-        const i=(y*W+x)*4;const p=[d[i],d[i+1],d[i+2]];
-        if(Math.max(...p)-Math.min(...p)<24)continue;
-        let best=-1,bd=40;res.forEach((c,j)=>{const dd=dist(c.rgb,p);if(dd<bd){bd=dd;best=j}});
-        if(best<0)continue;const b=bx[best];b.n++;
-        if(x<b.x0)b.x0=x;if(x>b.x1)b.x1=x;if(y<b.y0)b.y0=y;if(y>b.y1)b.y1=y;
-      }
-      const T=texts.map(t=>({s:t.s,x0:t.x*W,x1:(t.x+t.w)*W,y0:t.y*H,y1:(t.y+t.h)*H}))
-        .filter(t=>t.x0>=L.x0-2&&t.x0<=L.x1&&t.y1>=L.y0&&t.y0<=L.y1);
-      res.forEach((c,j)=>{
-        const b=bx[j];if(b.n<20||c.legendText)return;   // déjà nommée par une zone prioritaire
-        const h=b.y1-b.y0,yc=(b.y0+b.y1)/2;
-        const line=T.filter(t=>t.x0>=b.x1-2&&t.y0<=yc+h*.6+2&&t.y1>=yc-h*.6-2).sort((a,b)=>a.x0-b.x0);
-        if(!line.length||line[0].x0-b.x1>W*.15)return;
-        let out=line[0].s,end=line[0].x1;
-        for(const t of line.slice(1)){if(t.x0-end>(t.y1-t.y0)*3)break;out+=(t.x0-end>1?' ':'')+t.s;end=t.x1}
-        out=out.replace(/\s+/g,' ').trim();
-        if(out){c.legendText=out.slice(0,80);c.legendTag=L.tag;c.legendPos=[b.y0,b.x0]}   // position dans la légende : ordre d'affichage
-      });
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+      const p=y*W+x,j=lab[p];if(j<0)continue;
+      if(x===0||lab[p-1]!==j)per[j]++;if(x===W-1||lab[p+1]!==j)per[j]++;
+      if(y===0||lab[p-W]!==j)per[j]++;if(y===H-1||lab[p+W]!==j)per[j]++;
     }
+    res.forEach((c,j)=>{c.j=j;c.area=area[j];c.per=per[j]*Math.PI/4});   // contour en escalier → longueur réelle
+    E.forEach(c=>c.n=c.area);
+    const kept=res.reduce((s,c)=>s+c.n,0)||1;res.forEach(c=>c.pct=c.n/kept*100);
+    Object.defineProperty(res,'px',{value:{lab,W,H}});
     return res.sort((a,b)=>b.n-a.n);
   }
   /* Marquage compté dans les surfaces : chaque pixel de marquage (traits blancs/noirs/gris, ou couleur
