@@ -131,6 +131,10 @@ main p{color:var(--muted);margin:6px 0 0}
 .struct-list li.msg{display:block;color:var(--muted);font-size:13px;border:0}
 .struct-list .nm{font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .struct-list .uq{font-size:12.5px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.excl-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:8px 12px;border-top:1px solid var(--side-line);font-size:12.5px;color:var(--muted)}
+.excl-bar[hidden]{display:none}
+.excl-bar .chip{color:var(--danger);border-color:#e7b9b5;background:var(--danger-bg)}
+.excl-bar .chip:hover{border-color:var(--danger)}
 .ctr-l{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:12px}
 .recap-list .tools{display:flex;align-items:center;gap:6px}
 .recap-list .tools .sm{padding:2px 8px;font-size:11.5px}
@@ -410,9 +414,11 @@ body.noscroll{overflow:hidden}
         <div class="box-body">
           <div class="pane">
             <div class="pane-h"><b>Aperçu</b><span class="grow"></span>
+              <button class="sm excl-pick" title="Tracer sur le plan une zone à ne pas compter (partie de vue en double, cartouche…)">Exclure une zone</button>
               <button class="sm full-btn" title="Afficher le plan en plein écran (Échap pour quitter)">${FULL} Plein écran</button></div>
             <div class="view"><span class="msg">Chargement du plan…</span></div>
             <div class="pager" hidden><b></b><small>Molette sur le plan pour changer de page</small></div>
+            <div class="excl-bar" hidden></div>
           </div>
           <div class="pane legend">
             <div class="pane-h"><b>Légende</b><span class="leg-page"></span>
@@ -466,6 +472,7 @@ body.noscroll{overflow:hidden}
   /* ---- Légende : zone du plan choisie par l'utilisateur, affichée agrandie à droite ----
      La zone est enregistrée en fractions de la page non pivotée, pour rester juste après une rotation. */
   function toUnrot(x,y,rot){return rot===90?[y,1-x]:rot===180?[1-x,1-y]:rot===270?[1-y,x]:[x,y]}
+  function toRot(u,v,rot){return rot===90?[1-v,u]:rot===180?[1-u,1-v]:rot===270?[v,1-u]:[u,v]}
   function setupLegend(r,box,view,api){
     const pick=box.querySelector('.leg-pick'),clear=box.querySelector('.leg-clear');
     const lv=box.querySelector('.leg-view'),lp=box.querySelector('.leg-page');
@@ -487,7 +494,35 @@ body.noscroll{overflow:hidden}
         pickMsg:'Tracez un rectangle autour de la légende à utiliser sur l\'aperçu.',
         none:'Aucune légende choisie. Cliquez sur « Sélectionner sur le plan », puis tracez un rectangle autour de la légende à utiliser : puis cliquez sur « Valider » : ses libellés serviront en priorité à nommer les lignes du récapitulatif.'}
     };
-    const setBtns=()=>{for(const k in zones){const z=zones[k];
+    /* Zones exclues : parties du plan à ne pas compter (vue répétée en haut et en bas, cartouche…).
+       Rectangles en fractions de la page non pivotée, comme la légende ; hachurées sur l'aperçu. */
+    const exBtn=box.querySelector('.excl-pick'),exBar=box.querySelector('.excl-bar');
+    const exOnPage=()=>(r.excl||[]).filter(e=>(e.page||1)===api.page());
+    function renderExcl(){
+      exBtn.textContent=picking==='excl'?'Annuler':'Exclure une zone';exBtn.disabled=!!picking&&picking!=='excl';
+      const L=r.excl||[];exBar.hidden=!L.length&&picking!=='excl';exBar.innerHTML='';
+      if(picking==='excl'){exBar.innerHTML='<span class="msg">Tracez un rectangle sur la partie du plan à ne pas compter.</span>';return}
+      if(!L.length)return;
+      exBar.insertAdjacentHTML('beforeend','<span class="lbl">Zones exclues :</span>');
+      L.forEach((e,i)=>{const b=document.createElement('button');b.className='sm chip';
+        b.title='Compter à nouveau cette zone';b.textContent='Zone '+(i+1)+(api.pages()>1?' (p. '+(e.page||1)+')':'')+' ×';
+        b.onclick=()=>{r.excl.splice(i,1);if(!r.excl.length)delete r.excl;addPlan(r).catch(()=>{});renderExcl();api.setOverlay(drawExcl);recap(true)};
+        exBar.appendChild(b)});
+    }
+    function drawExcl(cv){
+      const g=cv.getContext('2d'),rot=r.rot||0,W=cv.width,H=cv.height;
+      exOnPage().forEach(e=>{
+        const a=toRot(e.x,e.y,rot),b=toRot(e.x+e.w,e.y+e.h,rot);
+        const x=Math.min(a[0],b[0])*W,y=Math.min(a[1],b[1])*H,w=Math.abs(a[0]-b[0])*W,h=Math.abs(a[1]-b[1])*H;
+        g.save();g.beginPath();g.rect(x,y,w,h);g.clip();
+        g.fillStyle='rgba(255,255,255,.7)';g.fillRect(x,y,w,h);
+        g.strokeStyle='rgba(179,38,30,.45)';g.lineWidth=Math.max(1,W/400);
+        const st=Math.max(6,W/80);for(let k=-h;k<w;k+=st){g.beginPath();g.moveTo(x+k,y+h);g.lineTo(x+k+h,y);g.stroke()}
+        g.restore();g.setLineDash([Math.max(4,W/150),Math.max(3,W/250)]);g.strokeStyle='#b3261e';g.lineWidth=Math.max(1.5,W/500);g.strokeRect(x,y,w,h);g.setLineDash([]);
+      });
+    }
+    api.setOverlay(drawExcl);
+    const setBtns=()=>{renderExcl();for(const k in zones){const z=zones[k];
       z.btn.textContent=picking===k?'Annuler':r[k]?'Changer la zone':'Sélectionner sur le plan';
       z.btn.disabled=!!picking&&picking!==k;z.clr.hidden=!!picking||!r[k]}
       // Légende à utiliser : prise en compte seulement une fois validée
@@ -616,7 +651,7 @@ body.noscroll{overflow:hidden}
       rl.innerHTML='<li class="msg">Analyse du plan…</li>';
       try{
         const src=await api.source(n);if(my!==rtok)return;
-        const res=analyzeColors(src.canvas,[r.legend2&&r.legend2.ok&&{...r.legend2,tag:'use'},r.legend].filter(Boolean),src.texts);
+        const res=analyzeColors(src.canvas,[r.legend2&&r.legend2.ok&&{...r.legend2,tag:'use'},r.legend].filter(Boolean),src.texts,(r.excl||[]).filter(e=>(e.page||1)===n));
         if(my!==rtok)return;
         found=res;ptPx=src.ptPerPx||null;detected=detectScale(src.texts);showScale();
         if(r.marquage)fillMarking(res,isMark,mPerPx());
@@ -759,7 +794,7 @@ body.noscroll{overflow:hidden}
     function stop(){picking=null;view.classList.remove('picking');view.querySelector('.sel')?.remove();render()}
     const startPick=k=>{if(picking===k){stop();return}if(picking)return;picking=k;view.classList.add('picking');render();
       if(k==='legend2')view.scrollIntoView({block:'nearest',behavior:'smooth'})};
-    pick.onclick=()=>startPick('legend');pick2.onclick=()=>startPick('legend2');
+    pick.onclick=()=>startPick('legend');pick2.onclick=()=>startPick('legend2');exBtn.onclick=()=>startPick('excl');
     clear.onclick=()=>{delete r.legend;addPlan(r).catch(()=>{});render();recap()};
     clear2.onclick=()=>{delete r.legend2;addPlan(r).catch(()=>{});render();recap()};
     view.addEventListener('pointerdown',e=>{
@@ -782,8 +817,9 @@ body.noscroll{overflow:hidden}
         const fy0=(Math.min(y0,y1)-mr.top)/mr.height,fy1=(Math.max(y0,y1)-mr.top)/mr.height;
         if(fx1-fx0<.01||fy1-fy0<.01){sel.remove();return}   // clic sans tracé : on reste en sélection
         const rot=r.rot||0,a=toUnrot(fx0,fy0,rot),b=toUnrot(fx1,fy1,rot);
-        r[picking]={page:api.page(),x:Math.min(a[0],b[0]),y:Math.min(a[1],b[1]),w:Math.abs(a[0]-b[0]),h:Math.abs(a[1]-b[1])};
-        addPlan(r).catch(()=>{});stop();recap();
+        const rect={page:api.page(),x:Math.min(a[0],b[0]),y:Math.min(a[1],b[1]),w:Math.abs(a[0]-b[0]),h:Math.abs(a[1]-b[1])};
+        if(picking==='excl'){(r.excl=r.excl||[]).push(rect);api.setOverlay(drawExcl)}else r[picking]=rect;
+        addPlan(r).catch(()=>{});stop();recap(true);
       };
       view.addEventListener('pointermove',move);view.addEventListener('pointerup',up);view.addEventListener('pointercancel',up);
     });
@@ -858,11 +894,12 @@ body.noscroll{overflow:hidden}
   /* Analyse des couleurs d'une page (non pivotée).
      Avec une légende lue : une ligne par ligne de légende, chaque pixel du plan allant à la pastille
      la plus proche ; les autres couleurs du plan restent des lignes à part. */
-  function analyzeColors(cv,legs,texts){
+  function analyzeColors(cv,legs,texts,excl){
     const W=cv.width,H=cv.height,d=cv.getContext('2d',{willReadFrequently:true}).getImageData(0,0,W,H).data;
-    // Zones de légende (la première est prioritaire) : exclues des surfaces
-    const Ls=(legs||[]).map(g=>({tag:g.tag||'leg',x0:g.x*W,x1:(g.x+g.w)*W,y0:g.y*H,y1:(g.y+g.h)*H}));
-    const rowZ=y=>Ls.filter(L=>y>=L.y0&&y<L.y1);
+    // Zones de légende (la première est prioritaire) et zones exclues : pas comptées dans les surfaces
+    const box=g=>({tag:g.tag||'leg',x0:g.x*W,x1:(g.x+g.w)*W,y0:g.y*H,y1:(g.y+g.h)*H});
+    const Ls=(legs||[]).map(box),Xs=[...Ls,...(excl||[]).map(box)];
+    const rowZ=y=>Xs.filter(L=>y>=L.y0&&y<L.y1);
     const inZ=(Z,x)=>{for(const L of Z)if(x>=L.x0&&x<L.x1)return true;return false};
     const ents=[];
     if(texts&&texts.length)Ls.forEach(L=>legendEntries(d,W,H,L,texts).forEach(e=>{
@@ -995,12 +1032,13 @@ body.noscroll{overflow:hidden}
   }
   // Affiche l'aperçu filtré ; les mises à jour rapides (curseur) sont regroupées par image
   function presenter(view,label){
-    let raw=null,filter=[],queued=false;
+    let raw=null,filter=[],queued=false,overlay=null;
     const show=()=>{queued=false;if(!raw)return;
       if(raw.width&&raw.height)view.style.setProperty('--ar',(raw.width+20)/(raw.height+20));   // + marge intérieure de 10 px
-      const cv=highlight(raw,filter);cv.setAttribute('aria-label',label);view.innerHTML='';view.appendChild(cv)};
+      const cv=highlight(raw,filter);if(overlay)overlay(cv);cv.setAttribute('aria-label',label);view.innerHTML='';view.appendChild(cv)};
     return {
       setRaw:c=>{raw=c;show()},
+      setOverlay:f=>{overlay=f;show()},
       setFilter:cols=>{const s=JSON.stringify(cols);if(s===JSON.stringify(filter))return;filter=cols;
         if(!queued){queued=true;requestAnimationFrame(show)}}
     };
@@ -1016,7 +1054,7 @@ body.noscroll{overflow:hidden}
       img.onerror=()=>{view.innerHTML='<span class="msg">Impossible d\'afficher cette image.</span>';rej()};
     });
     img.src=url;
-    return {redraw:draw,page:()=>1,pages:()=>1,setFilter:pres.setFilter,
+    return {redraw:draw,page:()=>1,pages:()=>1,setFilter:pres.setFilter,setOverlay:pres.setOverlay,
       crop:async rect=>{await loaded;return cropTo(img,img.naturalWidth,img.naturalHeight,rect,r.rot||0)},
       source:async()=>{await loaded;
         const k=Math.min(1,1500/Math.max(img.naturalWidth,img.naturalHeight));
@@ -1025,7 +1063,7 @@ body.noscroll{overflow:hidden}
   }
   function showPdf(r,view,pager){
     let draw=()=>{},n=1,doc=null,docP;const pres=presenter(view,r.name);
-    const api={redraw:()=>draw(),page:()=>n,pages:()=>doc?doc.numPages:1,setFilter:pres.setFilter,
+    const api={redraw:()=>draw(),page:()=>n,pages:()=>doc?doc.numPages:1,setFilter:pres.setFilter,setOverlay:pres.setOverlay,
       crop:async rect=>{
         const d=await docP;const page=await d.getPage(Math.min(rect.page||1,d.numPages));
         const rotation=page.rotate||0;const base=page.getViewport({scale:1,rotation});
