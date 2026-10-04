@@ -91,9 +91,10 @@ main p{color:var(--muted);margin:6px 0 0}
 /* Un encadré par plan, sous « Plan de base » */
 /* Chaque plan : bandeau pleine largeur, puis aperçu à gauche et légende à droite */
 .boxes{display:grid;grid-template-columns:minmax(0,1fr);gap:18px;margin-top:18px}
-.box-body{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.box-body{display:grid;grid-template-columns:minmax(0,1fr)}   /* aperçu sur toute la largeur, légende dessous */
 .pane{display:flex;flex-direction:column;min-width:0}
-.pane.legend{border-left:1px solid var(--side-line);contain:size} /* hauteur calée sur l'aperçu, la légende défile dedans */
+.pane.legend{border-top:1px solid var(--side-line)}
+.leg-view .recap{display:none}   /* récapitulatif masqué : la sélection se fait dans « Légende à utiliser » */
 .pane-h{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--side-line);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);min-height:41px}
 .pane-h b{font-weight:700;color:var(--ink)}
 .pane-h .leg-page{flex:1;text-transform:none;letter-spacing:0;font-size:12px}
