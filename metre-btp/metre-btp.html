@@ -405,6 +405,7 @@ body.noscroll{overflow:hidden}
             <button class="sm leg2-pick"></button><button class="sm leg2-clear" hidden>Effacer</button></div>
           <div class="use-body"><div class="use-crop"></div>
             <div class="use-sel" hidden><div class="sub-h"><b>Sélection des zones</b><span class="use-info"></span></div>
+              <div class="sel-bar"><span class="sel-info">Cochez des lignes pour les grouper.</span><button class="sm use-merge primary-sm" hidden title="Regrouper les lignes cochées en une seule">Grouper</button></div>
               <ul class="recap-list use-list"></ul></div></div>
         </div>`;
       box.querySelector('.del').onclick=async()=>{await delPlan(r.id).catch(()=>{});renderPlans()};
@@ -483,7 +484,7 @@ body.noscroll{overflow:hidden}
     /* Légende validée : extrait à gauche, sélection des zones à droite.
        Une ligne par pastille de la légende retrouvée sur le plan, dans l'ordre de la légende ;
        cocher une ligne revient à cocher la ligne correspondante du récapitulatif. */
-    const useBody=box.querySelector('.use-body'),useSel=box.querySelector('.use-sel'),useList=box.querySelector('.use-list'),useInfo=box.querySelector('.use-info');
+    const useBody=box.querySelector('.use-body'),useSel=box.querySelector('.use-sel'),useList=box.querySelector('.use-list'),useInfo=box.querySelector('.use-info'),useMerge=box.querySelector('.use-merge');
     let holdUse=false;   // pendant le réglage du contraste : ne pas reconstruire la liste (le curseur perdrait la main)
     function buildUse(){
       if(holdUse)return;
@@ -500,7 +501,7 @@ body.noscroll{overflow:hidden}
         li.innerHTML=`<input type="checkbox" class="pick"${on?' checked':''} aria-label="Sélectionner cette zone">
           <span class="sws">${it.members.map(c=>`<span class="sw" style="background:rgb(${c.rgb.join(',')})"></span>`).join('')}</span>
           <span class="nm"></span><span class="uq"></span>
-          <div class="prop"><span class="seg" role="group" aria-label="Type de mesure"><button data-k="m2" title="Mesure en surface (m²)">Surface</button><button data-k="ml" title="Mesure en linéaire (ml)">Linéaire</button></span>
+          <div class="prop">${it.group?'<button class="sm use-split" title="Séparer ce groupe en couleurs individuelles">Dégrouper</button>':''}<span class="seg" role="group" aria-label="Type de mesure"><button data-k="m2" title="Mesure en surface (m²)">Surface</button><button data-k="ml" title="Mesure en linéaire (ml)">Linéaire</button></span>
             <label class="ctr-l"${on?'':' hidden'}>Contraste <input type="range" class="ctr" min="-100" max="100" step="5" value="${(r.contrast||{})[it.key]||0}" title="Contraste de cette zone sur le plan (double-clic : réinitialiser)"></label></div>`;
         const nm=li.querySelector('.nm');nm.textContent=nm.title=(r.labels||{})[it.key]??it.auto;
         li.querySelector('.uq').textContent=it.li?.querySelector('.qty')?.textContent||'';
@@ -513,6 +514,7 @@ body.noscroll{overflow:hidden}
           b.classList.toggle('on',!!src&&src.classList.contains('on'));
           b.onclick=()=>src&&src.click();
         });
+        const us=li.querySelector('.use-split');if(us)us.onclick=()=>it.li?.querySelector('.split')?.click();
         // Contraste de la zone sur l'aperçu du plan
         const ctr=li.querySelector('.ctr');
         ctr.oninput=()=>{r.contrast=r.contrast||{};r.contrast[it.key]=Number(ctr.value);
@@ -524,6 +526,8 @@ body.noscroll{overflow:hidden}
       });
       const n=rows.filter(it=>(r.selected||[]).includes(it.key)).length;
       useInfo.textContent=n+' / '+rows.length+' sélectionnée'+(n>1?'s':'');
+      // Grouper : uniquement les lignes cochées de cette liste
+      useMerge.hidden=n<2;useMerge.onclick=()=>merge(rows.filter(it=>(r.selected||[]).includes(it.key)));
     }
     /* Récapitulatif : couleurs de remplissage présentes sur la page affichée, avec leur part et leur libellé */
     async function recap(force){
@@ -596,7 +600,7 @@ body.noscroll{overflow:hidden}
         const mem=g.keys.map(k=>byKey.get(k)).filter(Boolean);
         if(!mem.length)return;
         mem.forEach(c=>grouped.add(c.key));
-        items.push({key:'g:'+g.id,group:g,members:mem,auto:mem.map(c=>c.legendText||colorName(c.rgb)).join(' + ')});
+        items.push({key:'g:'+g.id,group:g,members:mem,auto:[...new Set(mem.map(c=>c.legendText||colorName(c.rgb)))].join(' + ')});
       });
       found.forEach(c=>{if(!grouped.has(c.key))items.push({key:c.key,members:[c],auto:c.legendText||colorName(c.rgb),fromLegend:!!c.legendText})});
       rl.innerHTML='';
@@ -655,8 +659,9 @@ body.noscroll{overflow:hidden}
     selAll.onclick=()=>{r.selected=[...new Set([...r.selected,...items.map(it=>it.key)])];addPlan(r).catch(()=>{});buildList()};
     selNone.onclick=()=>{const k=new Set(items.map(it=>it.key));r.selected=r.selected.filter(x=>!k.has(x));addPlan(r).catch(()=>{});buildList()};
     // Fusion : les lignes sélectionnées (couleurs ou groupes) deviennent un seul groupe, qui reste sélectionné
-    mergeBtn.onclick=()=>{
-      const sel=items.filter(it=>r.selected.includes(it.key));if(sel.length<2)return;
+    mergeBtn.onclick=()=>merge(items.filter(it=>r.selected.includes(it.key)));
+    function merge(sel){
+      if(sel.length<2)return;
       const keys=[...new Set(sel.flatMap(it=>it.members.map(c=>c.key)))];
       const oldGroups=sel.filter(it=>it.group).map(it=>it.group);
       // garde aussi les couleurs d'anciens groupes absentes de cette page
