@@ -111,6 +111,13 @@ main p{color:var(--muted);margin:6px 0 0}
 .recap-list .ctr[hidden],.ctr-l[hidden]{display:none}
 .mk{display:inline-flex;align-items:center;gap:6px;flex:1;min-width:0;color:var(--ink);cursor:pointer}
 .mk input{accent-color:var(--accent);margin:0}
+.struct{border-top:1px solid var(--side-line)}
+.struct-list{list-style:none;margin:0;padding:8px 14px 12px;background:var(--white);display:flex;flex-direction:column}
+.struct-list li{display:grid;grid-template-columns:auto minmax(0,1fr) auto;column-gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--w2)}
+.struct-list li:last-child{border-bottom:0}
+.struct-list li.msg{display:block;color:var(--muted);font-size:13px;border:0}
+.struct-list .nm{font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.struct-list .uq{font-size:12.5px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
 .ctr-l{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:12px}
 .recap-list .tools{display:flex;align-items:center;gap:6px}
 .recap-list .tools .sm{padding:2px 8px;font-size:11.5px}
@@ -409,6 +416,10 @@ body.noscroll{overflow:hidden}
             <div class="use-sel" hidden><div class="sub-h"><b>Sélection des zones</b><span class="use-info"></span></div>
               <div class="sel-bar"><label class="mk" title="Le marquage (traits blancs, noirs ou gris, et lignes de légende nommées « marquage » ou « signalisation ») posé sur une surface est compté dans cette surface"><input type="checkbox" class="use-mark"> Compter le marquage dans les surfaces</label><span class="sel-info"></span><button class="sm use-merge primary-sm" hidden title="Regrouper les lignes cochées en une seule">Grouper</button></div>
               <ul class="recap-list use-list"></ul></div></div>
+        </div>
+        <div class="struct">
+          <div class="pane-h"><b>Structure</b><span class="grow"></span><span class="struct-info"></span></div>
+          <ul class="struct-list"></ul>
         </div>`;
       box.querySelector('.del').onclick=async()=>{await delPlan(r.id).catch(()=>{});renderPlans()};
       plansEl.appendChild(box);
@@ -493,12 +504,26 @@ body.noscroll{overflow:hidden}
     const isMark=c=>MARK.test(norm((r.labels||{})[c.key]??c.legendText??''))
       ||(r.groups||[]).some(g=>g.keys.includes(c.key)&&MARK.test(norm((r.labels||{})['g:'+g.id]??'')));
     let holdUse=false;   // pendant le réglage du contraste : ne pas reconstruire la liste (le curseur perdrait la main)
+    /* Structure : reprend les zones de la légende à utiliser (mêmes lignes, groupes compris) */
+    const stList=box.querySelector('.struct-list'),stInfo=box.querySelector('.struct-info');
+    function buildStruct(rows){
+      stList.innerHTML='';stInfo.textContent=rows&&rows.length?rows.length+(rows.length>1?' zones':' zone'):'';
+      if(!rows||!rows.length){stList.innerHTML=`<li class="msg">${rows?'Aucune zone de la légende retrouvée sur cette page du plan.':'Validez une « Légende à utiliser » pour reprendre ici les différentes zones.'}</li>`;return}
+      rows.forEach(it=>{
+        const li=document.createElement('li');
+        li.innerHTML=`<span class="sws">${it.members.map(c=>`<span class="sw" style="background:rgb(${c.rgb.join(',')})"></span>`).join('')}</span><span class="nm"></span><span class="uq"></span>`;
+        const nm=li.querySelector('.nm');nm.textContent=nm.title=(r.labels||{})[it.key]??it.auto;
+        li.querySelector('.uq').textContent=it.li?.querySelector('.qty')?.textContent||'';
+        stList.appendChild(li);
+      });
+    }
     function buildUse(){
       if(holdUse)return;
       const on=!picking&&!!(r.legend2&&r.legend2.ok);
-      useBody.classList.toggle('split',on);useSel.hidden=!on;if(!on)return;
+      useBody.classList.toggle('split',on);useSel.hidden=!on;if(!on){buildStruct(null);return}
       const tagged=found.filter(c=>c.legendTag==='use').sort((a,b)=>a.legendPos[0]-b.legendPos[0]||a.legendPos[1]-b.legendPos[1]);
       const rows=[];tagged.forEach(c=>{const it=items.find(i=>i.members.includes(c));if(it&&!rows.includes(it))rows.push(it)});
+      buildStruct(rows);
       useList.innerHTML='';
       if(!rows.length){useInfo.textContent='';
         useList.innerHTML='<li class="msg">Aucune couleur de cette légende n\'a été retrouvée sur cette page du plan.</li>';return}
