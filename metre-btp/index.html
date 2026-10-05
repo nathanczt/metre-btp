@@ -340,7 +340,6 @@ body.noscroll{overflow:hidden}
   const TRASH='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>';
   const ROT_R='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>';
   const ROT_L='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.34-5.66"/><path d="M4 4v5h5"/></svg>';
-  const POP='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>';
   const FULL='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
   const EXIT='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>';
   let confirmId=null;
@@ -477,7 +476,6 @@ body.noscroll{overflow:hidden}
           <h4 title="${esc(r.name)}">${esc(r.name)}</h4><small>${size(r.size)}</small>
           <button class="ico rot" data-r="-90" title="Pivoter à gauche (90°)" aria-label="Pivoter à gauche">${ROT_L}</button>
           <button class="ico rot" data-r="90" title="Pivoter à droite (90°)" aria-label="Pivoter à droite">${ROT_R}</button>
-          <button class="ico pop" title="Ouvrir le plan dans un nouvel onglet (pour le mettre sur un autre écran)" aria-label="Ouvrir le plan dans un nouvel onglet">${POP}</button>
           <button class="ico del" title="Retirer ce plan" aria-label="Retirer ce plan">${TRASH}</button>
         </header>
         <div class="box-body">
@@ -520,43 +518,9 @@ body.noscroll{overflow:hidden}
         r.rot=(((r.rot||0)+Number(b.dataset.r))%360+360)%360;
         addPlan(r).catch(()=>{});api.redraw();legend.render();
       });
-      box.querySelector('.pop').onclick=()=>openPlanTab(r,api);
       const fs=setupFullscreen(box.querySelector('.pane'),box.querySelector('.full-btn'),api);
       if(!isImg)setupLayers(r,box,api,legend,fs);
     });
-  }
-
-  /* ---- Plan dans un nouvel onglet : rendu haute définition (calques gelés et rotation compris),
-     zoom à la molette, déplacement à la souris, double-clic pour recadrer. ---- */
-  function openPlanTab(r,api){
-    const w=window.open('','_blank');
-    if(!w){alert('Le navigateur a bloqué l\'ouverture d\'un nouvel onglet. Autorisez les fenêtres pop-up pour ce site.');return}
-    const d=w.document;
-    d.open();d.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(r.name)}</title>
-<style>html,body{margin:0;height:100%;background:#e9edf2;font:13px system-ui,sans-serif;color:#1c2530;overflow:hidden}
-#bar{position:fixed;top:0;left:0;right:0;display:flex;gap:12px;align-items:center;padding:8px 14px;background:#fff;border-bottom:1px solid #dde2e9;z-index:1}
-#bar b{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#bar small{color:#7a8591}
-#st{position:absolute;inset:41px 0 0;overflow:hidden;cursor:grab}#st.drag{cursor:grabbing}
-#st img{position:absolute;left:0;top:0;transform-origin:0 0;background:#fff;box-shadow:0 2px 14px rgba(28,37,48,.12);image-rendering:auto}
-#msg{position:absolute;inset:41px 0 0;display:grid;place-items:center;color:#7a8591}</style></head>
-<body><div id="bar"><b></b><small>Molette : zoom · glisser : déplacer · double-clic : recadrer</small></div><div id="st"></div><div id="msg">Préparation du plan…</div></body></html>`);d.close();
-    d.querySelector('#bar b').textContent=r.name+(api.pages()>1?' · page '+api.page():'');
-    (async()=>{try{
-      const cv=await api.crop({x:0,y:0,w:1,h:1,page:api.page()},6000);
-      const blob=await new Promise(res=>cv.toBlob(res,'image/png'));
-      const img=d.createElement('img');img.src=URL.createObjectURL(blob);img.width=cv.width;img.height=cv.height;
-      const st=d.getElementById('st');st.appendChild(img);d.getElementById('msg').remove();
-      let k=1,x=0,y=0;const set=()=>{img.style.transform=`translate(${x}px,${y}px) scale(${k})`};
-      const fit=()=>{const W=st.clientWidth,H=st.clientHeight;k=Math.min((W-32)/cv.width,(H-32)/cv.height);x=(W-cv.width*k)/2;y=(H-cv.height*k)/2;set()};
-      fit();w.addEventListener('resize',fit);st.addEventListener('dblclick',fit);
-      st.addEventListener('wheel',e=>{e.preventDefault();const b=st.getBoundingClientRect(),mx=e.clientX-b.left,my=e.clientY-b.top;
-        const f=Math.exp(-e.deltaY*.0015),nk=Math.min(Math.max(k*f,.02),8);x=mx-(mx-x)*nk/k;y=my-(my-y)*nk/k;k=nk;set()},{passive:false});
-      let drag=null;
-      st.addEventListener('pointerdown',e=>{drag={x:e.clientX-x,y:e.clientY-y};st.setPointerCapture(e.pointerId);st.classList.add('drag')});
-      st.addEventListener('pointermove',e=>{if(!drag)return;x=e.clientX-drag.x;y=e.clientY-drag.y;set()});
-      st.addEventListener('pointerup',()=>{drag=null;st.classList.remove('drag')});
-      img.draggable=false;
-    }catch(e){const m=d.getElementById('msg');if(m)m.textContent='Impossible d\'afficher ce plan.'}})();
   }
 
   /* ---- Calques du PDF (contenu optionnel) ou du DWG : liste affichée sous l'aperçu (sur le côté
@@ -1241,8 +1205,8 @@ body.noscroll{overflow:hidden}
     return n+q;
   }
   /* Découpe une zone (fractions, page non pivotée) d'une source et l'oriente comme le plan */
-  function cropTo(src,sw,sh,rect,rot,max=1600){
-    const cw=rect.w*sw,ch=rect.h*sh,k=Math.min(1,max/Math.max(cw,ch));
+  function cropTo(src,sw,sh,rect,rot){
+    const cw=rect.w*sw,ch=rect.h*sh,k=Math.min(1,1600/Math.max(cw,ch));
     const cv=document.createElement('canvas');cv.width=Math.max(1,Math.round(cw*k));cv.height=Math.max(1,Math.round(ch*k));
     cv.getContext('2d').drawImage(src,rect.x*sw,rect.y*sh,cw,ch,0,0,cv.width,cv.height);
     return rot?rotated(cv,cv.width,cv.height,rot):cv;
@@ -1296,7 +1260,7 @@ body.noscroll{overflow:hidden}
     });
     img.src=url;
     return {redraw:draw,page:()=>1,pages:()=>1,setFilter:pres.setFilter,setOverlay:pres.setOverlay,
-      crop:async(rect,px)=>{await loaded;return cropTo(img,img.naturalWidth,img.naturalHeight,rect,r.rot||0,px)},
+      crop:async rect=>{await loaded;return cropTo(img,img.naturalWidth,img.naturalHeight,rect,r.rot||0)},
       source:async()=>{await loaded;
         const k=Math.min(1,1500/Math.max(img.naturalWidth,img.naturalHeight));
         const cv=document.createElement('canvas');cv.width=Math.round(img.naturalWidth*k);cv.height=Math.round(img.naturalHeight*k);
@@ -1540,7 +1504,7 @@ body.noscroll{overflow:hidden}
     const list=()=>D.layers.map((L,i)=>({id:L.name,name:L.name,visible:(r.ocg||{})[L.name]??L.on,c:L.c})).filter((g,i)=>D.items.some(it=>it.l===i));
     setTimeout(()=>{try{draw()}catch(e){view.innerHTML='<span class="msg">Impossible d\'afficher ce DWG.</span>'}});
     return {redraw:draw,page:()=>1,pages:()=>1,setFilter:pres.setFilter,setOverlay:pres.setOverlay,
-      crop:async(rect,px)=>{const s=drawDwg(D,hidden(),rect,px||1600);return r.rot?rotated(s.canvas,s.canvas.width,s.canvas.height,r.rot):s.canvas},
+      crop:async rect=>{const s=drawDwg(D,hidden(),rect,1600);return r.rot?rotated(s.canvas,s.canvas.width,s.canvas.height,r.rot):s.canvas},
       source:async()=>drawDwg(D,hidden(),null,1500),
       layers:async()=>list(),layersNow:list,
       setLayer:(id,v)=>{(r.ocg=r.ocg||{})[id]=v}};
@@ -1555,14 +1519,14 @@ body.noscroll{overflow:hidden}
     const rnd=async(page,ctx,vp)=>{await ocP;
       return page.render(oc?{canvasContext:ctx,viewport:vp,optionalContentConfigPromise:Promise.resolve(oc)}:{canvasContext:ctx,viewport:vp}).promise};
     const api={redraw:()=>draw(),page:()=>n,pages:()=>doc?doc.numPages:1,setFilter:pres.setFilter,setOverlay:pres.setOverlay,
-      crop:async(rect,px)=>{
+      crop:async rect=>{
         const d=await docP;const page=await d.getPage(Math.min(rect.page||1,d.numPages));
         const rotation=page.rotate||0;const base=page.getViewport({scale:1,rotation});
-        const scale=Math.min((px||1600)/Math.max(rect.w*base.width,rect.h*base.height,1),Math.sqrt(16e6/(base.width*base.height)));
+        const scale=Math.min(1600/Math.max(rect.w*base.width,rect.h*base.height,1),Math.sqrt(16e6/(base.width*base.height)));
         const vp=page.getViewport({scale,rotation});
         const cv=document.createElement('canvas');cv.width=vp.width;cv.height=vp.height;
         await rnd(page,cv.getContext('2d'),vp);
-        return cropTo(cv,cv.width,cv.height,rect,r.rot||0,px);
+        return cropTo(cv,cv.width,cv.height,rect,r.rot||0);
       },
       // Page non pivotée pour l'analyse : image + textes (positions en fractions de page)
       source:async num=>{
