@@ -157,12 +157,21 @@ main p{color:var(--muted);margin:6px 0 0}
 .excl-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:8px 12px;border-top:1px solid var(--side-line);font-size:12.5px;color:var(--muted)}
 .excl-bar[hidden]{display:none}
 /* Geler les calques : plan en plein écran, liste des calques sur le côté */
-.ocg-bar,.ocg-btn[hidden]{display:none}
+.ocg-btn[hidden]{display:none}
+.ocg-bar{display:none;flex-direction:column;border-top:1px solid var(--side-line);background:var(--w1);font-size:13px}
+.pane.ocg-on>.ocg-bar{display:flex}
+.pane:not(.full).ocg-on>.ocg-bar .ocg-l{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));max-height:240px;overflow:auto}
+.ocg-bar .ocg-f{display:flex;gap:6px;flex-wrap:wrap;padding:8px 12px;border-bottom:1px solid var(--side-line)}
+.ocg-bar .ocg-f input{flex:1;min-width:120px;border:1px solid var(--side-line);border-radius:4px;padding:4px 8px;font:inherit;font-size:12.5px;background:var(--white)}
+.ocg-bar .sw{width:10px;height:10px;border-radius:2px;flex:none;border:1px solid rgba(0,0,0,.2)}
+.ocg-bar .ocg-only{margin-left:auto;border:0;background:none;color:var(--muted);font-size:11.5px;cursor:pointer;padding:0 2px;visibility:hidden}
+.ocg-bar label:hover .ocg-only{visibility:visible}
+.ocg-bar .ocg-none{padding:8px 12px;color:var(--muted)}
 .pane.full.ocg-on{display:grid;grid-template-columns:minmax(0,1fr) 280px;grid-template-rows:auto minmax(0,1fr)}
 .pane.full.ocg-on>.pane-h{grid-column:1/-1}
 .pane.full.ocg-on>:not(.pane-h):not(.ocg-bar){grid-column:1}
 .pane.full.ocg-on>.view{grid-row:2;height:100%}
-.pane.full.ocg-on>.ocg-bar{display:flex;flex-direction:column;grid-column:2;grid-row:2/span 4;min-height:0;overflow:auto;border-left:1px solid var(--side-line);background:var(--w1);font-size:13px}
+.pane.full.ocg-on>.ocg-bar{grid-column:2;border-top:0;grid-row:2/span 4;min-height:0;overflow:auto;border-left:1px solid var(--side-line);background:var(--w1);font-size:13px}
 .ocg-bar .ocg-h{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--side-line);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .ocg-bar .ocg-h b{flex:1;color:var(--ink)}
 .ocg-bar .ocg-h .sm{text-transform:none;letter-spacing:0}
@@ -472,7 +481,7 @@ body.noscroll{overflow:hidden}
         <div class="box-body">
           <div class="pane">
             <div class="pane-h"><b>Aperçu</b><span class="grow"></span>
-              <button class="sm ocg-btn" hidden title="Ouvrir le plan en plein écran pour geler ou dégeler ses calques">Geler les calques</button>
+              <button class="sm ocg-btn" hidden title="Afficher ou masquer la liste des calques pour geler ceux que vous ne voulez pas">Calques</button>
               <button class="sm excl-pick" title="Tracer sur le plan une zone à ne pas compter (partie de vue en double, cartouche…)">Exclure une zone</button>
               <button class="sm full-btn" title="Afficher le plan en plein écran (Échap pour quitter)">${FULL} Plein écran</button></div>
             <div class="view"><span class="msg">Chargement du plan…</span></div>
@@ -514,32 +523,43 @@ body.noscroll{overflow:hidden}
     });
   }
 
-  /* ---- Geler les calques du PDF (contenu optionnel) : le plan s'ouvre en plein écran avec la liste
-     des calques sur le côté ; décocher un calque le gèle. Un calque gelé disparaît de l'aperçu
-     et des analyses (légendes, surfaces). Choix mémorisé avec le plan (r.ocg). ---- */
+  /* ---- Calques du PDF (contenu optionnel) ou du DWG : liste affichée sous l'aperçu (sur le côté
+     en plein écran) ; décocher un calque le gèle. Un calque gelé disparaît de l'aperçu et des
+     analyses (légendes, surfaces). Choix mémorisé avec le plan (r.ocg). ---- */
   async function setupLayers(r,box,api,legend,fs){
     const btn=box.querySelector('.ocg-btn'),bar=box.querySelector('.ocg-bar'),pane=box.querySelector('.pane');
     const list=await api.layers().catch(()=>[]);
     if(!list.length||!box.isConnected)return;
-    btn.hidden=false;
+    btn.hidden=false;bar.hidden=false;
+    bar.innerHTML=`<div class="ocg-h"><b></b></div>
+      <div class="ocg-f"><input type="search" placeholder="Rechercher un calque…">
+        <button class="sm ocg-all" title="Dégeler les calques affichés dans la liste">Tout afficher</button>
+        <button class="sm ocg-off" title="Geler les calques affichés dans la liste">Tout geler</button></div>
+      <div class="ocg-l"></div>`;
+    const head=bar.querySelector('.ocg-h b'),q=bar.querySelector('input'),ul=bar.querySelector('.ocg-l');
     const apply=()=>{addPlan(r).catch(()=>{});api.redraw();legend.render();fill()};
+    const shown=()=>{const t=q.value.trim().toLowerCase();return api.layersNow().filter(g=>!t||g.name.toLowerCase().includes(t))};
+    const setAll=(L,v)=>{L.forEach(g=>api.setLayer(g.id,v));apply()};
     const fill=()=>{
       const L=api.layersNow(),off=L.filter(g=>!g.visible).length;
-      btn.textContent='Geler les calques'+(off?' ('+off+' gelé'+(off>1?'s':'')+')':'');
-      bar.innerHTML=`<div class="ocg-h"><b>Calques (${L.length-off}/${L.length})</b></div>`;
-      if(off){const all=document.createElement('button');all.className='sm';all.textContent='Tout dégeler';
-        all.onclick=()=>{L.forEach(g=>api.setLayer(g.id,true));apply()};bar.firstChild.appendChild(all)}
-      L.forEach(g=>{
+      btn.textContent='Calques ('+(off?off+' gelé'+(off>1?'s':'')+' / '+L.length:L.length)+')';
+      head.textContent=`Calques : ${L.length-off} affiché${L.length-off>1?'s':''} sur ${L.length}`;
+      const S=shown();ul.innerHTML='';
+      if(!S.length)ul.innerHTML='<div class="ocg-none">Aucun calque ne correspond.</div>';
+      S.forEach(g=>{
         const lab=document.createElement('label');lab.className=g.visible?'':'off';lab.title=g.name;
-        lab.innerHTML=`<input type="checkbox"${g.visible?' checked':''}> ${esc(g.name)}`;
+        lab.innerHTML=`<input type="checkbox"${g.visible?' checked':''}>${g.c?`<span class="sw" style="background:${esc(g.c)}"></span>`:''}<span>${esc(g.name)}</span><button class="ocg-only" title="N'afficher que ce calque">seul</button>`;
         lab.querySelector('input').onchange=e=>{api.setLayer(g.id,e.target.checked);apply()};
-        bar.appendChild(lab);
+        lab.querySelector('.ocg-only').onclick=e=>{e.preventDefault();api.layersNow().forEach(h=>api.setLayer(h.id,h.id===g.id));apply()};
+        ul.appendChild(lab);
       });
     };
+    q.oninput=fill;
+    bar.querySelector('.ocg-all').onclick=()=>setAll(shown(),true);
+    bar.querySelector('.ocg-off').onclick=()=>setAll(shown(),false);
     fill();
-    fs.onChange(on=>{if(!on)pane.classList.remove('ocg-on')});
-    btn.onclick=()=>{if(pane.classList.contains('ocg-on')){fs.set(false);return}
-      pane.classList.add('ocg-on');if(fs.on())requestAnimationFrame(()=>api.redraw());else fs.set(true)};
+    pane.classList.add('ocg-on');   // liste affichée d'office
+    btn.onclick=()=>{pane.classList.toggle('ocg-on');if(fs.on())requestAnimationFrame(()=>api.redraw())};
   }
 
   /* ---- Plein écran de l'aperçu : panneau étendu à toute la fenêtre (+ vrai plein écran si le navigateur l'autorise) ---- */
@@ -1481,7 +1501,7 @@ body.noscroll{overflow:hidden}
     const pres=presenter(view,r.name),D=r.dwg;
     const hidden=()=>{const o=r.ocg||{};return new Set(D.layers.map((L,i)=>(o[L.name]??L.on)?-1:i).filter(i=>i>=0))};
     const draw=()=>{const s=drawDwg(D,hidden(),null,3000);pres.setRaw(r.rot?rotated(s.canvas,s.canvas.width,s.canvas.height,r.rot):s.canvas)};
-    const list=()=>D.layers.map((L,i)=>({id:L.name,name:L.name,visible:(r.ocg||{})[L.name]??L.on})).filter((g,i)=>D.items.some(it=>it.l===i));
+    const list=()=>D.layers.map((L,i)=>({id:L.name,name:L.name,visible:(r.ocg||{})[L.name]??L.on,c:L.c})).filter((g,i)=>D.items.some(it=>it.l===i));
     setTimeout(()=>{try{draw()}catch(e){view.innerHTML='<span class="msg">Impossible d\'afficher ce DWG.</span>'}});
     return {redraw:draw,page:()=>1,pages:()=>1,setFilter:pres.setFilter,setOverlay:pres.setOverlay,
       crop:async rect=>{const s=drawDwg(D,hidden(),rect,1600);return r.rot?rotated(s.canvas,s.canvas.width,s.canvas.height,r.rot):s.canvas},
