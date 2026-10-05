@@ -1,3 +1,5 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Métré BTP</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap">
 <style>
@@ -89,9 +91,10 @@ main p{color:var(--muted);margin:6px 0 0}
 /* Un encadré par plan, sous « Plan de base » */
 /* Chaque plan : bandeau pleine largeur, puis aperçu à gauche et légende à droite */
 .boxes{display:grid;grid-template-columns:minmax(0,1fr);gap:18px;margin-top:18px}
-.box-body{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.box-body{display:grid;grid-template-columns:minmax(0,1fr)}   /* aperçu sur toute la largeur, légende dessous */
 .pane{display:flex;flex-direction:column;min-width:0}
-.pane.legend{border-left:1px solid var(--side-line);contain:size} /* hauteur calée sur l'aperçu, la légende défile dedans */
+.pane.legend{border-top:1px solid var(--side-line)}
+.leg-view .recap,.leg-view .leg-crop{display:none}   /* récapitulatif masqué : la sélection se fait dans « Légende automatique » */
 .pane-h{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--side-line);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);min-height:41px}
 .pane-h b{font-weight:700;color:var(--ink)}
 .pane-h .leg-page{flex:1;text-transform:none;letter-spacing:0;font-size:12px}
@@ -105,7 +108,55 @@ main p{color:var(--muted);margin:6px 0 0}
 .sel-bar .sel-info{flex:1;min-width:0}
 .sel-bar .sm:hover{border-color:var(--accent);color:var(--accent)}
 .recap-list .ctr{width:96px;accent-color:var(--accent);cursor:ew-resize;margin:0}
-.recap-list .ctr[hidden]{display:none}
+.recap-list .ctr[hidden],.ctr-l[hidden]{display:none}
+.mk{display:inline-flex;align-items:center;gap:6px;flex:1;min-width:0;color:var(--ink);cursor:pointer}
+.mk input{accent-color:var(--accent);margin:0}
+.struct{border-top:1px solid var(--side-line)}
+.struct-list{list-style:none;margin:0;padding:8px 14px 12px;background:var(--white);display:flex;flex-direction:column}
+.struct-list li{padding:10px 0;border-bottom:1px solid var(--w2)}
+.struct-list .zh{display:grid;grid-template-columns:auto minmax(0,1fr) auto;column-gap:10px;align-items:center}
+.layers{display:flex;flex-direction:column;gap:6px;margin:8px 0 0 28px}
+.layer{display:grid;grid-template-columns:18px minmax(0,1fr) auto 90px 28px;gap:8px;align-items:center;font-size:13px}
+.layer .ln{color:var(--muted);font-size:12px;text-align:right}
+.layer input{border:1px solid var(--side-line);border-radius:4px;padding:5px 8px;background:var(--white);min-width:0}
+.layer input:focus{border-color:var(--accent);outline:none}
+.l-ep{display:inline-flex;align-items:center;gap:4px;color:var(--muted)}
+.l-ep input{width:64px;text-align:right}
+.l-vol{font-weight:700;font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.layer .ico{opacity:.6}
+.zf{display:flex;align-items:center;gap:10px;margin:8px 0 0 28px;font-size:12.5px}
+.zf .add-l:hover{border-color:var(--accent);color:var(--accent)}
+.zf .vt{flex:1;text-align:right;font-weight:700;color:var(--ink)}
+.struct-list li:last-child{border-bottom:0}
+.struct-list li.msg{display:block;color:var(--muted);font-size:13px;border:0}
+.struct-list .nm{font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.struct-list .uq{font-size:12.5px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.excl-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:8px 12px;border-top:1px solid var(--side-line);font-size:12.5px;color:var(--muted)}
+.excl-bar[hidden]{display:none}
+/* Geler les calques : plan en plein écran, liste des calques sur le côté */
+.ocg-bar,.ocg-btn[hidden]{display:none}
+.pane.full.ocg-on{display:grid;grid-template-columns:minmax(0,1fr) 280px;grid-template-rows:auto minmax(0,1fr)}
+.pane.full.ocg-on>.pane-h{grid-column:1/-1}
+.pane.full.ocg-on>:not(.pane-h):not(.ocg-bar){grid-column:1}
+.pane.full.ocg-on>.view{grid-row:2;height:100%}
+.pane.full.ocg-on>.ocg-bar{display:flex;flex-direction:column;grid-column:2;grid-row:2/span 4;min-height:0;overflow:auto;border-left:1px solid var(--side-line);background:var(--w1);font-size:13px}
+.ocg-bar .ocg-h{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--side-line);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.ocg-bar .ocg-h b{flex:1;color:var(--ink)}
+.ocg-bar .ocg-h .sm{text-transform:none;letter-spacing:0}
+.ocg-bar label{display:flex;align-items:center;gap:8px;padding:6px 12px;color:var(--ink);cursor:pointer;overflow-wrap:anywhere}
+.ocg-bar label:hover{background:var(--w2)}
+.ocg-bar label.off{color:var(--muted);text-decoration:line-through}
+@media (max-width:720px){.pane.full.ocg-on{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) 35vh}.pane.full.ocg-on>.ocg-bar{grid-column:1;grid-row:3;border-left:0;border-top:1px solid var(--side-line)}}
+.excl-bar .chip{color:var(--danger);border-color:#e7b9b5;background:var(--danger-bg)}
+.excl-bar .chip:hover{border-color:var(--danger)}
+.man-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.man-list li{display:grid;grid-template-columns:18px minmax(0,1fr) auto 28px;column-gap:10px;align-items:center;padding:5px 0;border-bottom:1px solid var(--w2)}
+.man-list li.msg{display:block;border:0;color:var(--muted);font-size:13px}
+.man-list .lab{min-width:0;border:1px solid transparent;background:transparent;border-radius:4px;padding:3px 6px;font-size:13.5px;font-weight:600}
+.man-list .lab:hover{border-color:var(--side-line)}
+.man-list .lab:focus{border-color:var(--accent);background:var(--white);outline:none}
+.man-list .uq{font-size:12.5px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ctr-l{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:12px}
 .recap-list .tools{display:flex;align-items:center;gap:6px}
 .recap-list .tools .sm{padding:2px 8px;font-size:11.5px}
 .sws{display:flex;gap:2px;cursor:pointer;flex-wrap:wrap;max-width:62px}
@@ -141,7 +192,9 @@ main p{color:var(--muted);margin:6px 0 0}
 .use-crop{display:flex;justify-content:center;align-items:center;min-width:0}
 .use-body.split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:start}
 .use-sel{min-width:0;border-left:1px solid var(--side-line);padding-left:18px}
-.use-list .nm{min-width:0;font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+.use-list .nm{min-width:0;font-size:13.5px;font-weight:600;border:1px solid transparent;background:transparent;border-radius:4px;padding:3px 6px;margin-left:-6px;text-overflow:ellipsis}
+.use-list .nm:hover{border-color:var(--side-line)}
+.use-list .nm:focus{border-color:var(--accent);background:var(--white);outline:none}
 .use-list .uq{font-size:12.5px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
 @media (max-width:900px){.use-body.split{grid-template-columns:minmax(0,1fr)}.use-sel{border-left:0;padding-left:0;border-top:1px solid var(--side-line);padding-top:12px}}
 .use-body canvas{display:block;max-width:100%;max-height:60vh;width:auto;height:auto;box-shadow:0 1px 6px rgba(28,37,48,.12)}
@@ -154,7 +207,7 @@ main p{color:var(--muted);margin:6px 0 0}
 .full-btn{display:inline-flex;align-items:center;gap:5px}
 .full-btn svg{width:13px;height:13px}
 .pane.full{position:fixed;inset:0;z-index:1000;background:var(--white);padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
-.pane.full .view{flex:1;aspect-ratio:auto;min-height:0}
+.pane.full .view{flex:1;aspect-ratio:auto;width:100%;min-height:0}
 body.noscroll{overflow:hidden}
 .view.picking{cursor:crosshair;outline:2px solid var(--accent);outline-offset:-2px}
 .view.picking canvas,.view.picking img{pointer-events:none;user-select:none}
@@ -168,9 +221,9 @@ body.noscroll{overflow:hidden}
 .box-h small{color:var(--muted);font-size:12px;white-space:nowrap}
 .box-h .ico{opacity:.6}.box-h .ico:hover{opacity:1}
 .rot:hover{color:var(--accent);background:var(--w2)}
-/* Format A paysage (√2) : la hauteur suit la largeur de l'encadré */
-.view{background:var(--white);display:flex;justify-content:center;align-items:center;padding:10px;aspect-ratio:1.414/1;max-width:100%;overflow:hidden}
-.view img,.view canvas{display:block;max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;box-shadow:0 1px 6px rgba(28,37,48,.12)}
+/* L'encadré prend les proportions du plan affiché (--ar), A paysage (√2) en attendant */
+.view{background:var(--white);display:flex;justify-content:center;align-items:center;padding:10px;aspect-ratio:var(--ar,1.414);width:min(100%,calc(85vh * var(--ar,1.414)));margin-inline:auto;max-width:100%;overflow:hidden}
+.view img,.view canvas{display:block;max-width:100%;max-height:100%;width:100%;height:100%;object-fit:contain;box-shadow:0 1px 6px rgba(28,37,48,.12)}
 .view .msg{color:var(--muted);font-size:13px}
 .pager{display:flex;align-items:center;justify-content:center;gap:10px;padding:8px;border-top:1px solid var(--side-line);font-size:13px;color:var(--muted)}
 .pager[hidden]{display:none}
@@ -384,43 +437,81 @@ body.noscroll{overflow:hidden}
         <div class="box-body">
           <div class="pane">
             <div class="pane-h"><b>Aperçu</b><span class="grow"></span>
+              <button class="sm ocg-btn" hidden title="Ouvrir le plan en plein écran pour geler ou dégeler ses calques">Geler les calques</button>
+              <button class="sm excl-pick" title="Tracer sur le plan une zone à ne pas compter (partie de vue en double, cartouche…)">Exclure une zone</button>
               <button class="sm full-btn" title="Afficher le plan en plein écran (Échap pour quitter)">${FULL} Plein écran</button></div>
             <div class="view"><span class="msg">Chargement du plan…</span></div>
             <div class="pager" hidden><b></b><small>Molette sur le plan pour changer de page</small></div>
+            <div class="excl-bar" hidden></div>
+            <div class="ocg-bar" hidden></div>
           </div>
           <div class="pane legend">
-            <div class="pane-h"><b>Légende</b><span class="leg-page"></span>
+            <div class="pane-h"><b>Légende manuelle</b><span class="leg-page"></span>
               <button class="sm leg-pick"></button><button class="sm leg-clear" hidden>Effacer</button></div>
             <div class="leg-view"></div>
           </div>
         </div>
         <div class="use-leg">
-          <div class="pane-h"><b>Légende à utiliser</b><span class="leg2-page"></span><span class="grow"></span>
+          <div class="pane-h"><b>Légende automatique</b><span class="leg2-page"></span><span class="grow"></span>
             <span class="leg2-state"></span>
             <button class="sm leg2-ok primary-sm" hidden title="Utiliser cette légende pour nommer le récapitulatif">Valider</button>
             <button class="sm leg2-pick"></button><button class="sm leg2-clear" hidden>Effacer</button></div>
           <div class="use-body"><div class="use-crop"></div>
             <div class="use-sel" hidden><div class="sub-h"><b>Sélection des zones</b><span class="use-info"></span></div>
+              <div class="sel-bar"><label class="mk" title="Le marquage (traits blancs, noirs ou gris, et lignes de légende nommées « marquage » ou « signalisation ») posé sur une surface est compté dans cette surface"><input type="checkbox" class="use-mark"> Compter le marquage dans les surfaces</label><span class="sel-info"></span><button class="sm use-merge primary-sm" hidden title="Regrouper les lignes cochées en une seule">Grouper</button></div>
               <ul class="recap-list use-list"></ul></div></div>
+        </div>
+        <div class="struct">
+          <div class="pane-h"><b>Structure</b><span class="grow"></span><span class="struct-info"></span></div>
+          <ul class="struct-list"></ul>
         </div>`;
       box.querySelector('.del').onclick=async()=>{await delPlan(r.id).catch(()=>{});renderPlans()};
       plansEl.appendChild(box);
       const view=box.querySelector('.view');
       const api=isImg?showImg(r,view):showPdf(r,view,box.querySelector('.pager'));
       const legend=setupLegend(r,box,view,api);
-      setupFullscreen(box.querySelector('.pane'),box.querySelector('.full-btn'),api);
       box.querySelectorAll('.rot').forEach(b=>b.onclick=()=>{
         r.rot=(((r.rot||0)+Number(b.dataset.r))%360+360)%360;
         addPlan(r).catch(()=>{});api.redraw();legend.render();
       });
+      const fs=setupFullscreen(box.querySelector('.pane'),box.querySelector('.full-btn'),api);
+      if(!isImg)setupLayers(r,box,api,legend,fs);
     });
+  }
+
+  /* ---- Geler les calques du PDF (contenu optionnel) : le plan s'ouvre en plein écran avec la liste
+     des calques sur le côté ; décocher un calque le gèle. Un calque gelé disparaît de l'aperçu
+     et des analyses (légendes, surfaces). Choix mémorisé avec le plan (r.ocg). ---- */
+  async function setupLayers(r,box,api,legend,fs){
+    const btn=box.querySelector('.ocg-btn'),bar=box.querySelector('.ocg-bar'),pane=box.querySelector('.pane');
+    const list=await api.layers().catch(()=>[]);
+    if(!list.length||!box.isConnected)return;
+    btn.hidden=false;
+    const apply=()=>{addPlan(r).catch(()=>{});api.redraw();legend.render();fill()};
+    const fill=()=>{
+      const L=api.layersNow(),off=L.filter(g=>!g.visible).length;
+      btn.textContent='Geler les calques'+(off?' ('+off+' gelé'+(off>1?'s':'')+')':'');
+      bar.innerHTML=`<div class="ocg-h"><b>Calques (${L.length-off}/${L.length})</b></div>`;
+      if(off){const all=document.createElement('button');all.className='sm';all.textContent='Tout dégeler';
+        all.onclick=()=>{L.forEach(g=>api.setLayer(g.id,true));apply()};bar.firstChild.appendChild(all)}
+      L.forEach(g=>{
+        const lab=document.createElement('label');lab.className=g.visible?'':'off';lab.title=g.name;
+        lab.innerHTML=`<input type="checkbox"${g.visible?' checked':''}> ${esc(g.name)}`;
+        lab.querySelector('input').onchange=e=>{api.setLayer(g.id,e.target.checked);apply()};
+        bar.appendChild(lab);
+      });
+    };
+    fill();
+    fs.onChange(on=>{if(!on)pane.classList.remove('ocg-on')});
+    btn.onclick=()=>{if(pane.classList.contains('ocg-on')){fs.set(false);return}
+      pane.classList.add('ocg-on');if(fs.on())requestAnimationFrame(()=>api.redraw());else fs.set(true)};
   }
 
   /* ---- Plein écran de l'aperçu : panneau étendu à toute la fenêtre (+ vrai plein écran si le navigateur l'autorise) ---- */
   function setupFullscreen(pane,btn,api){
-    let on=false;
+    let on=false,cbs=[];
     const set=v=>{
-      if(v===on)return;on=v;
+      if(v===on)return;on=v;cbs.forEach(f=>f(on));
       pane.classList.toggle('full',on);document.body.classList.toggle('noscroll',on);
       btn.innerHTML=on?`${EXIT} Quitter le plein écran`:`${FULL} Plein écran`;
       if(on){try{pane.requestFullscreen?.().catch(()=>{})}catch(e){}}
@@ -430,11 +521,13 @@ body.noscroll{overflow:hidden}
     btn.onclick=()=>set(!on);
     document.addEventListener('keydown',e=>{if(e.key==='Escape'&&on&&!pane.querySelector('.view.picking'))set(false)});
     document.addEventListener('fullscreenchange',()=>{if(on&&document.fullscreenElement!==pane)set(false)});
+    return {set,on:()=>on,onChange:f=>cbs.push(f)};
   }
 
   /* ---- Légende : zone du plan choisie par l'utilisateur, affichée agrandie à droite ----
      La zone est enregistrée en fractions de la page non pivotée, pour rester juste après une rotation. */
   function toUnrot(x,y,rot){return rot===90?[y,1-x]:rot===180?[1-x,1-y]:rot===270?[1-y,x]:[x,y]}
+  function toRot(u,v,rot){return rot===90?[1-v,u]:rot===180?[1-u,1-v]:rot===270?[v,1-u]:[u,v]}
   function setupLegend(r,box,view,api){
     const pick=box.querySelector('.leg-pick'),clear=box.querySelector('.leg-clear');
     const lv=box.querySelector('.leg-view'),lp=box.querySelector('.leg-page');
@@ -444,21 +537,93 @@ body.noscroll{overflow:hidden}
       <div class="sel-bar"><span class="sel-info"></span><button class="sm sel-merge primary-sm" hidden title="Regrouper les lignes cochées en une seule">Fusionner</button><button class="sm sel-all" hidden>Tout sélectionner</button><button class="sm sel-none" hidden>Tout désélectionner</button></div>
       <div class="scale-bar"><b>Échelle</b> 1 / <input class="scale-in" type="number" min="1" step="1" placeholder="?" aria-label="Échelle du plan"><span class="scale-info"></span></div>
       <ul class="recap-list"><li class="msg">Analyse du plan…</li></ul></section>
+      <section class="man-zones"><div class="sub-h"><b>Zones sélectionnées sur le plan</b><span class="man-info"></span></div><ul class="man-list"><li class="msg">Analyse du plan…</li></ul></section>
       <section class="leg-crop"><div class="sub-h"><b>Extrait de la légende</b></div><div class="crop-body"></div></section>`;
     const cb=lv.querySelector('.crop-body'),rl=lv.querySelector('.recap-list'),rp=lv.querySelector('.recap-page');
+    /* Zones du plan choisies à la main : « Sélectionner sur le plan », puis un clic sur une zone colorée
+       ajoute sa ligne. Couleurs du plan telles quelles, sans lien avec la légende automatique
+       (zones de légende et zones exclues non comptées). r.manZones = clés, r.manLabels = noms. */
+    const manList=lv.querySelector('.man-list'),manInfo=lv.querySelector('.man-info');
+    let manRes=null;
+    function buildMan(zs){
+      if(zs)manRes=zs;zs=manRes||[];
+      const keys=r.manZones||[],mpp=mPerPx();r.manLabels=r.manLabels||{};
+      manList.innerHTML='';manInfo.textContent=picking==='man'?'cliquez sur les zones du plan':keys.length?keys.length+(keys.length>1?' zones':' zone'):'';
+      if(!keys.length){manList.innerHTML='<li class="msg">Aucune zone. Cliquez sur « Sélectionner sur le plan », puis sur les zones colorées du plan : chaque clic ajoute la ligne de la zone.</li>';return}
+      keys.forEach(k=>{
+        const c=zs.find(c=>c.key===k),li=document.createElement('li');
+        li.innerHTML=`<span class="sw"${c?` style="background:rgb(${c.rgb.join(',')})"`:''}></span><input class="lab" aria-label="Nom de la zone"><span class="uq"></span>
+          <button class="ico del" title="Retirer cette zone" aria-label="Retirer cette zone">${TRASH}</button>`;
+        const inp=li.querySelector('.lab'),auto=c?colorName(c.rgb):'Zone';inp.value=r.manLabels[k]??auto;
+        inp.onchange=()=>{const v=inp.value.trim();if(v&&v!==auto)r.manLabels[k]=v;else{delete r.manLabels[k];inp.value=auto}addPlan(r).catch(()=>{})};
+        const uq=li.querySelector('.uq');
+        if(!c)uq.textContent='absente de cette page';
+        else if(mpp){const v=c.area*mpp*mpp;uq.textContent='≈ '+fmt(v,v<10?2:1)+' m²'}
+        else uq.textContent=fmt(c.pct,1)+' %';
+        li.querySelector('.del').onclick=()=>{r.manZones=r.manZones.filter(x=>x!==k);delete r.manLabels[k];addPlan(r).catch(()=>{});buildMan();setBtns()};
+        manList.appendChild(li);
+      });
+    }
+    // Clic sur l'aperçu en mode sélection : zone colorée sous le pointeur (ou à quelques pixels)
+    function pickZoneAt(e){
+      const media=view.querySelector('canvas');if(!media||!manRes||!manRes.px)return;
+      const br=media.getBoundingClientRect(),nw=media.width,nh=media.height,fk=Math.min(br.width/nw,br.height/nh);
+      const fx=(e.clientX-br.left-(br.width-nw*fk)/2)/(nw*fk),fy=(e.clientY-br.top-(br.height-nh*fk)/2)/(nh*fk);
+      if(fx<0||fx>1||fy<0||fy>1)return;
+      const [u,v]=toUnrot(fx,fy,r.rot||0),{lab,W,H}=manRes.px;
+      const px=Math.min(W-1,u*W|0),py=Math.min(H-1,v*H|0);let j=-1;
+      for(let rad=0;rad<=6&&j<0;rad++)for(let dy=-rad;dy<=rad&&j<0;dy++)for(let dx=-rad;dx<=rad;dx++){
+        const x=px+dx,y=py+dy;if(x<0||y<0||x>=W||y>=H)continue;const l=lab[y*W+x];if(l>=0){j=l;break}}
+      const c=manRes.find(c=>c.j===j);
+      if(!c){manInfo.textContent='pas de zone colorée à cet endroit';return}
+      r.manZones=r.manZones||[];
+      if(!r.manZones.includes(c.key)){r.manZones.push(c.key);addPlan(r).catch(()=>{})}
+      buildMan();
+    }
     // Deux zones tracées sur le plan : la zone de légende (en-tête du panneau Légende)
     // et la « légende à utiliser » (encadré sous le plan), prioritaire pour nommer les lignes.
     const zones={
-      legend:{btn:pick,clr:clear,cb,lp,tok:0,label:'Légende du plan',
+      legend:{btn:pick,clr:clear,cb,lp,tok:0,label:'Légende manuelle',
         pickMsg:'Tracez un rectangle autour de la légende sur l\'aperçu à gauche.',
         none:'Aucune zone de légende. Cliquez sur « Sélectionner sur le plan », puis tracez un rectangle autour de la légende : les couleurs du récapitulatif prendront les noms de la légende.'},
-      legend2:{btn:pick2,clr:clear2,cb:box.querySelector('.use-crop'),lp:box.querySelector('.leg2-page'),tok:0,label:'Légende à utiliser',
+      legend2:{btn:pick2,clr:clear2,cb:box.querySelector('.use-crop'),lp:box.querySelector('.leg2-page'),tok:0,label:'Légende automatique',
         pickMsg:'Tracez un rectangle autour de la légende à utiliser sur l\'aperçu.',
         none:'Aucune légende choisie. Cliquez sur « Sélectionner sur le plan », puis tracez un rectangle autour de la légende à utiliser : puis cliquez sur « Valider » : ses libellés serviront en priorité à nommer les lignes du récapitulatif.'}
     };
-    const setBtns=()=>{for(const k in zones){const z=zones[k];
+    /* Zones exclues : parties du plan à ne pas compter (vue répétée en haut et en bas, cartouche…).
+       Rectangles en fractions de la page non pivotée, comme la légende ; hachurées sur l'aperçu. */
+    const exBtn=box.querySelector('.excl-pick'),exBar=box.querySelector('.excl-bar');
+    const exOnPage=()=>(r.excl||[]).filter(e=>(e.page||1)===api.page());
+    function renderExcl(){
+      exBtn.textContent=picking==='excl'?'Annuler':'Exclure une zone';exBtn.disabled=!!picking&&picking!=='excl';
+      const L=r.excl||[];exBar.hidden=!L.length&&picking!=='excl';exBar.innerHTML='';
+      if(picking==='excl'){exBar.innerHTML='<span class="msg">Tracez un rectangle sur la partie du plan à ne pas compter.</span>';return}
+      if(!L.length)return;
+      exBar.insertAdjacentHTML('beforeend','<span class="lbl">Zones exclues :</span>');
+      L.forEach((e,i)=>{const b=document.createElement('button');b.className='sm chip';
+        b.title='Compter à nouveau cette zone';b.textContent='Zone '+(i+1)+(api.pages()>1?' (p. '+(e.page||1)+')':'')+' ×';
+        b.onclick=()=>{r.excl.splice(i,1);if(!r.excl.length)delete r.excl;addPlan(r).catch(()=>{});renderExcl();api.setOverlay(drawExcl);recap(true)};
+        exBar.appendChild(b)});
+    }
+    function drawExcl(cv){
+      const g=cv.getContext('2d'),rot=r.rot||0,W=cv.width,H=cv.height;
+      exOnPage().forEach(e=>{
+        const a=toRot(e.x,e.y,rot),b=toRot(e.x+e.w,e.y+e.h,rot);
+        const x=Math.min(a[0],b[0])*W,y=Math.min(a[1],b[1])*H,w=Math.abs(a[0]-b[0])*W,h=Math.abs(a[1]-b[1])*H;
+        g.save();g.beginPath();g.rect(x,y,w,h);g.clip();
+        g.fillStyle='rgba(255,255,255,.7)';g.fillRect(x,y,w,h);
+        g.strokeStyle='rgba(179,38,30,.45)';g.lineWidth=Math.max(1,W/400);
+        const st=Math.max(6,W/80);for(let k=-h;k<w;k+=st){g.beginPath();g.moveTo(x+k,y+h);g.lineTo(x+k+h,y);g.stroke()}
+        g.restore();g.setLineDash([Math.max(4,W/150),Math.max(3,W/250)]);g.strokeStyle='#b3261e';g.lineWidth=Math.max(1.5,W/500);g.strokeRect(x,y,w,h);g.setLineDash([]);
+      });
+    }
+    api.setOverlay(drawExcl);
+    const setBtns=()=>{renderExcl();for(const k in zones){const z=zones[k];
       z.btn.textContent=picking===k?'Annuler':r[k]?'Changer la zone':'Sélectionner sur le plan';
       z.btn.disabled=!!picking&&picking!==k;z.clr.hidden=!!picking||!r[k]}
+      // Légende manuelle : le bouton sert à choisir les zones du plan par clic
+      pick.textContent=picking==='man'?'Terminer la sélection':'Sélectionner sur le plan';
+      pick.disabled=!!picking&&picking!=='man';clear.hidden=!!picking||!(r.manZones||[]).length;
       // Légende à utiliser : prise en compte seulement une fois validée
       const L2=r.legend2,show=!picking&&!!L2;
       ok2.hidden=!show||!!L2.ok;
@@ -479,30 +644,105 @@ body.noscroll{overflow:hidden}
     /* Légende validée : extrait à gauche, sélection des zones à droite.
        Une ligne par pastille de la légende retrouvée sur le plan, dans l'ordre de la légende ;
        cocher une ligne revient à cocher la ligne correspondante du récapitulatif. */
-    const useBody=box.querySelector('.use-body'),useSel=box.querySelector('.use-sel'),useList=box.querySelector('.use-list'),useInfo=box.querySelector('.use-info');
+    const useBody=box.querySelector('.use-body'),useSel=box.querySelector('.use-sel'),useList=box.querySelector('.use-list'),useInfo=box.querySelector('.use-info'),useMerge=box.querySelector('.use-merge'),useMark=box.querySelector('.use-mark');
+    useMark.onchange=()=>{r.marquage=useMark.checked;addPlan(r).catch(()=>{});recap(true)};
+    // Couleurs de marquage : libellé (couleur ou groupe) contenant marquage / signalisation
+    const MARK=/marquage|signali|passage pieton|zebra/;
+    const isMark=c=>MARK.test(norm((r.labels||{})[c.key]??c.legendText??''))
+      ||(r.groups||[]).some(g=>g.keys.includes(c.key)&&MARK.test(norm((r.labels||{})['g:'+g.id]??'')));
+    let holdUse=false;   // pendant le réglage du contraste : ne pas reconstruire la liste (le curseur perdrait la main)
+    /* Structure : reprend les zones de la légende à utiliser (mêmes lignes, groupes compris) */
+    const stList=box.querySelector('.struct-list'),stInfo=box.querySelector('.struct-info');
+    /* Couches par zone (r.layers[clé de ligne] = [{name, ep en cm}]) : volume = surface × épaisseur */
+    let stRows=null;
+    const areaM2=it=>{const mpp=mPerPx();return mpp?it.members.reduce((s,c)=>s+(c.area||0),0)*mpp*mpp:null};
+    const numFr=v=>{const n=parseFloat(String(v).replace(',','.'));return isFinite(n)&&n>0?n:null};
+    function buildStruct(rows){
+      stRows=rows;stList.innerHTML='';stInfo.textContent=rows&&rows.length?rows.length+(rows.length>1?' zones':' zone'):'';
+      if(!rows||!rows.length){stList.innerHTML=`<li class="msg">${rows?'Aucune zone de la légende retrouvée sur cette page du plan.':'Validez une « Légende automatique » pour reprendre ici les différentes zones.'}</li>`;return}
+      r.layers=r.layers||{};
+      rows.forEach(it=>{
+        const li=document.createElement('li'),L=r.layers[it.key]||[];
+        const isSurf=it.li?.querySelector('.seg button.on')?.dataset.k!=='ml';
+        li.innerHTML=`<div class="zh"><span class="sws">${it.members.map(c=>`<span class="sw" style="background:rgb(${c.rgb.join(',')})"></span>`).join('')}</span><span class="nm"></span><span class="uq"></span></div>
+          <div class="layers"></div>
+          <div class="zf"><button class="sm add-l">+ Ajouter une couche</button><span class="vt"></span></div>`;
+        const nm=li.querySelector('.nm');nm.textContent=nm.title=(r.labels||{})[it.key]??it.auto;
+        li.querySelector('.uq').textContent=it.li?.querySelector('.qty')?.textContent||'';
+        const lw=li.querySelector('.layers'),vt=li.querySelector('.vt'),A=isSurf?areaM2(it):null;
+        const vol=l=>{const e=numFr(l.ep);return A!=null&&e?A*e/100:null};
+        const total=()=>{
+          if(!L.length){vt.textContent='';return}
+          if(!isSurf){vt.textContent='Volume : zone mesurée en linéaire, passez-la en surface';return}
+          if(A==null){vt.textContent='Volume : échelle inconnue';return}
+          const v=L.reduce((s,l)=>s+(vol(l)||0),0);vt.textContent='Volume total ≈ '+fmt(v,v<10?2:1)+' m³'};
+        L.forEach((l,i)=>{
+          const row=document.createElement('div');row.className='layer';
+          row.innerHTML=`<span class="ln">${i+1}</span><input class="l-name" placeholder="Nom de la couche" aria-label="Nom de la couche ${i+1}">
+            <label class="l-ep"><input class="l-ep-in" inputmode="decimal" placeholder="0" aria-label="Épaisseur de la couche ${i+1} en cm"> cm</label>
+            <span class="l-vol"></span><button class="ico del" title="Supprimer cette couche" aria-label="Supprimer la couche ${i+1}">${TRASH}</button>`;
+          const ni=row.querySelector('.l-name'),ei=row.querySelector('.l-ep-in'),lv2=row.querySelector('.l-vol');
+          ni.value=l.name||'';ei.value=l.ep||'';
+          const showVol=()=>{const v=vol(l);lv2.textContent=v!=null?'≈ '+fmt(v,v<10?2:1)+' m³':'';total()};
+          ni.onchange=()=>{l.name=ni.value.trim();addPlan(r).catch(()=>{})};
+          ei.oninput=()=>{l.ep=ei.value.trim();showVol()};
+          ei.onchange=()=>addPlan(r).catch(()=>{});
+          row.querySelector('.del').onclick=()=>{L.splice(i,1);if(!L.length)delete r.layers[it.key];addPlan(r).catch(()=>{});buildStruct(stRows)};
+          showVol();lw.appendChild(row);
+        });
+        total();
+        li.querySelector('.add-l').onclick=()=>{L.push({name:'',ep:''});r.layers[it.key]=L;addPlan(r).catch(()=>{});buildStruct(stRows);
+          stList.children[rows.indexOf(it)]?.querySelectorAll('.l-name')[L.length-1]?.focus()};
+        stList.appendChild(li);
+      });
+    }
     function buildUse(){
+      if(holdUse)return;
       const on=!picking&&!!(r.legend2&&r.legend2.ok);
-      useBody.classList.toggle('split',on);useSel.hidden=!on;if(!on)return;
+      useBody.classList.toggle('split',on);useSel.hidden=!on;if(!on){buildStruct(null);return}
       const tagged=found.filter(c=>c.legendTag==='use').sort((a,b)=>a.legendPos[0]-b.legendPos[0]||a.legendPos[1]-b.legendPos[1]);
       const rows=[];tagged.forEach(c=>{const it=items.find(i=>i.members.includes(c));if(it&&!rows.includes(it))rows.push(it)});
+      buildStruct(rows);
       useList.innerHTML='';
       if(!rows.length){useInfo.textContent='';
-        useList.innerHTML='<li class="msg">Aucune couleur de cette légende n\'a été retrouvée sur cette page du plan.</li>';return}
+        useList.innerHTML='<li class="msg">Aucune pastille de couleur trouvée dans la zone tracée. Vérifiez que le rectangle englobe bien les pastilles de la légende (bouton « Changer la zone »).</li>';buildStruct(rows);return}
       rows.forEach(it=>{
         const li=document.createElement('li'),on=(r.selected||[]).includes(it.key);
         li.className=on?'on':'';
         li.innerHTML=`<input type="checkbox" class="pick"${on?' checked':''} aria-label="Sélectionner cette zone">
           <span class="sws">${it.members.map(c=>`<span class="sw" style="background:rgb(${c.rgb.join(',')})"></span>`).join('')}</span>
-          <span class="nm"></span><span class="uq"></span>`;
-        const nm=li.querySelector('.nm');nm.textContent=nm.title=(r.labels||{})[it.key]??it.auto;
+          <input class="nm" aria-label="Nom de la zone" title="Nom de la zone (modifiable)"><span class="uq"></span>
+          <div class="prop">${it.group?'<button class="sm use-split" title="Séparer ce groupe en couleurs individuelles">Dégrouper</button>':''}<span class="seg" role="group" aria-label="Type de mesure"><button data-k="m2" title="Mesure en surface (m²)">Surface</button><button data-k="ml" title="Mesure en linéaire (ml)">Linéaire</button></span>
+            <label class="ctr-l"${on?'':' hidden'}>Contraste <input type="range" class="ctr" min="-100" max="100" step="5" value="${(r.contrast||{})[it.key]||0}" title="Contraste de cette zone sur le plan (double-clic : réinitialiser)"></label></div>`;
+        const nm=li.querySelector('.nm');nm.value=(r.labels||{})[it.key]??it.auto;
+        // renommer : même libellé que dans le récapitulatif (r.labels)
+        nm.onchange=()=>{const v=nm.value.trim();r.labels=r.labels||{};if(v&&v!==it.auto)r.labels[it.key]=v;else delete r.labels[it.key];
+          const src=it.li&&it.li.querySelector('.lab');if(src)src.value=r.labels[it.key]??it.auto;addPlan(r).catch(()=>{});fillProp(it)};
         li.querySelector('.uq').textContent=it.li?.querySelector('.qty')?.textContent||'';
         const cbx=li.querySelector('.pick');
         cbx.onchange=()=>{const src=it.li&&it.li.querySelector('.pick');if(src){src.checked=cbx.checked;src.onchange()}};
-        li.querySelector('.sws').onclick=nm.onclick=()=>{cbx.checked=!cbx.checked;cbx.onchange()};
+        li.querySelector('.sws').onclick=()=>{cbx.checked=!cbx.checked;cbx.onchange()};
+        // Surface / linéaire : même choix que dans le récapitulatif (masqué)
+        li.querySelectorAll('.seg button').forEach(b=>{
+          const src=it.li&&it.li.querySelector(`.seg button[data-k="${b.dataset.k}"]`);
+          b.classList.toggle('on',!!src&&src.classList.contains('on'));
+          b.onclick=()=>src&&src.click();
+        });
+        const us=li.querySelector('.use-split');if(us)us.onclick=()=>it.li?.querySelector('.split')?.click();
+        // Contraste de la zone sur l'aperçu du plan
+        const ctr=li.querySelector('.ctr');
+        ctr.oninput=()=>{r.contrast=r.contrast||{};r.contrast[it.key]=Number(ctr.value);
+          const src=it.li&&it.li.querySelector('.ctr');if(src)src.value=ctr.value;
+          holdUse=true;try{applySel(true)}finally{holdUse=false}};
+        ctr.onchange=()=>addPlan(r).catch(()=>{});
+        ctr.ondblclick=()=>{ctr.value=0;ctr.oninput();ctr.onchange()};
         useList.appendChild(li);
       });
       const n=rows.filter(it=>(r.selected||[]).includes(it.key)).length;
       useInfo.textContent=n+' / '+rows.length+' sélectionnée'+(n>1?'s':'');
+      useMark.checked=!!r.marquage;
+      // Grouper : uniquement les lignes cochées de cette liste
+      useMerge.hidden=n<2;useMerge.onclick=()=>merge(rows.filter(it=>(r.selected||[]).includes(it.key)));
     }
     /* Récapitulatif : couleurs de remplissage présentes sur la page affichée, avec leur part et leur libellé */
     async function recap(force){
@@ -510,12 +750,14 @@ body.noscroll{overflow:hidden}
       if(!force&&key===lastKey)return;lastKey=key;
       const my=++rtok;
       rp.textContent=api.pages()>1?'page '+n:'';
-      rl.innerHTML='<li class="msg">Analyse du plan…</li>';
+      rl.innerHTML='<li class="msg">Analyse du plan…</li>';manList.innerHTML='<li class="msg">Analyse du plan…</li>';manInfo.textContent='';
       try{
         const src=await api.source(n);if(my!==rtok)return;
-        const res=analyzeColors(src.canvas,[r.legend2&&r.legend2.ok&&{...r.legend2,tag:'use'},r.legend].filter(Boolean),src.texts);
+        const res=analyzeColors(src.canvas,[r.legend2&&r.legend2.ok&&{...r.legend2,tag:'use'},r.legend].filter(Boolean),src.texts,(r.excl||[]).filter(e=>(e.page||1)===n));
         if(my!==rtok)return;
         found=res;ptPx=src.ptPerPx||null;detected=detectScale(src.texts);showScale();
+        if(r.marquage)fillMarking(res,isMark,mPerPx());
+        buildMan(analyzeColors(src.canvas,[r.legend2,r.legend].filter(Boolean),[],(r.excl||[]).filter(e=>(e.page||1)===n)));
         if(!res.length){rl.innerHTML='<li class="msg">Aucune surface colorée détectée sur cette page.</li>';items=[];applySel(true);return}
         buildList();
       }catch(e){if(my===rtok)rl.innerHTML='<li class="msg">Analyse impossible pour ce plan.</li>'}
@@ -560,7 +802,9 @@ body.noscroll{overflow:hidden}
       it.li.querySelectorAll('.seg button').forEach(b=>b.classList.toggle('on',b.dataset.k===k));
       const q=it.li.querySelector('.qty'),w=it.li.querySelector('.why');
       if(!p.mpp)q.textContent='';
-      else if(k==='m2'){const v=p.A*p.mpp*p.mpp;q.textContent='≈ '+fmt(v,v<10?2:1)+' m²'}
+      else if(k==='m2'){const v=p.A*p.mpp*p.mpp;q.textContent='≈ '+fmt(v,v<10?2:1)+' m²';
+        const mk=r.marquage?it.members.reduce((s,c)=>s+(c.markAdd||0),0)*p.mpp*p.mpp:0;
+        if(mk>=.05)q.textContent+=' (dont '+fmt(mk,mk<10?2:1)+' m² de marquage)'}
       else{const v=p.P/2*p.mpp;q.textContent='≈ '+fmt(v,v<10?2:1)+' ml'}
       w.textContent=k===p.auto?p.why:'choisi manuellement';
       q.title=p.mpp?'Estimation à partir de l\'aperçu analysé : à vérifier par un métré précis':'';
@@ -575,7 +819,7 @@ body.noscroll{overflow:hidden}
         const mem=g.keys.map(k=>byKey.get(k)).filter(Boolean);
         if(!mem.length)return;
         mem.forEach(c=>grouped.add(c.key));
-        items.push({key:'g:'+g.id,group:g,members:mem,auto:mem.map(c=>c.legendText||colorName(c.rgb)).join(' + ')});
+        items.push({key:'g:'+g.id,group:g,members:mem,auto:[...new Set(mem.map(c=>c.legendText||colorName(c.rgb)))].join(' + ')});
       });
       found.forEach(c=>{if(!grouped.has(c.key))items.push({key:c.key,members:[c],auto:c.legendText||colorName(c.rgb),fromLegend:!!c.legendText})});
       rl.innerHTML='';
@@ -624,7 +868,7 @@ body.noscroll{overflow:hidden}
       // Contraste par ligne : curseur -100…+100 → facteur 0,2…3 par rapport au fond blanc
       const fac=k=>{const v=(r.contrast||{})[k]||0;return v>=0?1+v/50:1+v/125};
       const sel=items.filter(it=>r.selected.includes(it.key));
-      const cols=sel.flatMap(it=>it.members.map(c=>({rgb:c.rgb,f:fac(it.key)})));
+      const cols=sel.flatMap(it=>it.members.flatMap(c=>(c.rgbs||[c.rgb]).map(rgb=>({rgb,f:fac(it.key)}))));
       const n=sel.length;
       selInfo.textContent=n?n+(n>1?' lignes sélectionnées':' ligne sélectionnée'):'Aucune sélection';
       selNone.hidden=!n;selAll.hidden=!items.length||n===items.length;mergeBtn.hidden=n<2;
@@ -634,8 +878,9 @@ body.noscroll{overflow:hidden}
     selAll.onclick=()=>{r.selected=[...new Set([...r.selected,...items.map(it=>it.key)])];addPlan(r).catch(()=>{});buildList()};
     selNone.onclick=()=>{const k=new Set(items.map(it=>it.key));r.selected=r.selected.filter(x=>!k.has(x));addPlan(r).catch(()=>{});buildList()};
     // Fusion : les lignes sélectionnées (couleurs ou groupes) deviennent un seul groupe, qui reste sélectionné
-    mergeBtn.onclick=()=>{
-      const sel=items.filter(it=>r.selected.includes(it.key));if(sel.length<2)return;
+    mergeBtn.onclick=()=>merge(items.filter(it=>r.selected.includes(it.key)));
+    function merge(sel){
+      if(sel.length<2)return;
       const keys=[...new Set(sel.flatMap(it=>it.members.map(c=>c.key)))];
       const oldGroups=sel.filter(it=>it.group).map(it=>it.group);
       // garde aussi les couleurs d'anciens groupes absentes de cette page
@@ -649,16 +894,20 @@ body.noscroll{overflow:hidden}
       r.selected=r.selected.filter(k=>!sel.some(it=>it.key===k));r.selected.push(gk);
       addPlan(r).catch(()=>{});buildList();
     };
-    function stop(){picking=null;view.classList.remove('picking');view.querySelector('.sel')?.remove();render()}
-    const startPick=k=>{if(picking===k){stop();return}if(picking)return;picking=k;view.classList.add('picking');render();
-      if(k==='legend2')view.scrollIntoView({block:'nearest',behavior:'smooth'})};
-    pick.onclick=()=>startPick('legend');pick2.onclick=()=>startPick('legend2');
-    clear.onclick=()=>{delete r.legend;addPlan(r).catch(()=>{});render();recap()};
+    function stop(){picking=null;view.classList.remove('picking');view.querySelector('.sel')?.remove();render();buildMan()}
+    const startPick=k=>{if(picking===k){stop();return}if(picking)return;picking=k;view.classList.add('picking');render();buildMan();
+      if(k==='legend2'||k==='man')view.scrollIntoView({block:'nearest',behavior:'smooth'})};
+    pick.onclick=()=>startPick('man');pick2.onclick=()=>startPick('legend2');exBtn.onclick=()=>startPick('excl');
+    clear.onclick=()=>{delete r.manZones;addPlan(r).catch(()=>{});buildMan();setBtns()};
     clear2.onclick=()=>{delete r.legend2;addPlan(r).catch(()=>{});render();recap()};
     view.addEventListener('pointerdown',e=>{
-      if(!picking)return;const media=view.querySelector('canvas,img');if(!media)return;
+      if(!picking)return;
+      if(picking==='man'){e.preventDefault();pickZoneAt(e);return}const media=view.querySelector('canvas,img');if(!media)return;
       e.preventDefault();view.setPointerCapture(e.pointerId);
-      const mr=media.getBoundingClientRect(),vr=view.getBoundingClientRect();
+      // zone réellement occupée par le plan dans l'élément (object-fit:contain)
+      const br=media.getBoundingClientRect(),vr=view.getBoundingClientRect();
+      const nw=media.naturalWidth||media.width,nh=media.naturalHeight||media.height,fk=Math.min(br.width/nw,br.height/nh);
+      const mr={width:nw*fk,height:nh*fk,left:br.left+(br.width-nw*fk)/2,top:br.top+(br.height-nh*fk)/2};mr.right=mr.left+mr.width;mr.bottom=mr.top+mr.height;
       const cl=(v,a,b)=>Math.min(Math.max(v,a),b);
       const x0=cl(e.clientX,mr.left,mr.right),y0=cl(e.clientY,mr.top,mr.bottom);
       const sel=document.createElement('div');sel.className='sel';view.appendChild(sel);
@@ -672,8 +921,9 @@ body.noscroll{overflow:hidden}
         const fy0=(Math.min(y0,y1)-mr.top)/mr.height,fy1=(Math.max(y0,y1)-mr.top)/mr.height;
         if(fx1-fx0<.01||fy1-fy0<.01){sel.remove();return}   // clic sans tracé : on reste en sélection
         const rot=r.rot||0,a=toUnrot(fx0,fy0,rot),b=toUnrot(fx1,fy1,rot);
-        r[picking]={page:api.page(),x:Math.min(a[0],b[0]),y:Math.min(a[1],b[1]),w:Math.abs(a[0]-b[0]),h:Math.abs(a[1]-b[1])};
-        addPlan(r).catch(()=>{});stop();recap();
+        const rect={page:api.page(),x:Math.min(a[0],b[0]),y:Math.min(a[1],b[1]),w:Math.abs(a[0]-b[0]),h:Math.abs(a[1]-b[1])};
+        if(picking==='excl'){(r.excl=r.excl||[]).push(rect);api.setOverlay(drawExcl)}else r[picking]=rect;
+        addPlan(r).catch(()=>{});stop();recap(true);
       };
       view.addEventListener('pointermove',move);view.addEventListener('pointerup',up);view.addEventListener('pointercancel',up);
     });
@@ -682,13 +932,112 @@ body.noscroll{overflow:hidden}
     return {render};
   }
 
-  /* ---- Analyse des couleurs d'une page (non pivotée) ---- */
-  function analyzeColors(cv,legs,texts){
+  // Couleur de remplissage : assez saturée, ou teinte pâle (gris bleuté, vert d'eau…) distincte du blanc du papier.
+  // Sinon blanc, noir, gris neutre (traits, fond, texte).
+  const chroma=(R,G,B)=>Math.max(R,G,B)-Math.min(R,G,B)>=10;
+  /* Lignes d'une zone de légende : chaque pastille de couleur et le libellé écrit à sa droite forment une ligne.
+     Renvoie [{text, cols:[[r,g,b]…] (couleurs de la pastille), pos:[y,x]}]. */
+  function legendEntries(d,W,H,L,texts){
+    const zx0=Math.max(0,L.x0|0),zx1=Math.min(W,Math.ceil(L.x1)),zy0=Math.max(0,L.y0|0),zy1=Math.min(H,Math.ceil(L.y1));
+    const zw=zx1-zx0,zh=zy1-zy0;if(zw<2||zh<2)return [];
+    // pastilles : taches de couleur (composantes connexes), réunies quand elles se touchent (remplissage + bordure, hachures)
+    const seen=new Uint8Array(zw*zh),blobs=[];
+    const on=(x,y)=>{const i=(y*W+x)*4;return d[i+3]>=128&&chroma(d[i],d[i+1],d[i+2])};
+    for(let y=zy0;y<zy1;y++)for(let x=zx0;x<zx1;x++){
+      const s=(y-zy0)*zw+(x-zx0);if(seen[s]||!on(x,y))continue;
+      const b={x0:x,x1:x,y0:y,y1:y,pix:[]},st=[s];seen[s]=1;
+      while(st.length){const q=st.pop(),qx=q%zw+zx0,qy=(q/zw|0)+zy0,i=(qy*W+qx)*4;
+        b.pix.push([d[i],d[i+1],d[i+2]]);if(qx<b.x0)b.x0=qx;if(qx>b.x1)b.x1=qx;if(qy<b.y0)b.y0=qy;if(qy>b.y1)b.y1=qy;
+        for(const [nx,ny] of [[qx-1,qy],[qx+1,qy],[qx,qy-1],[qx,qy+1]]){
+          if(nx<zx0||nx>=zx1||ny<zy0||ny>=zy1)continue;const n=(ny-zy0)*zw+(nx-zx0);
+          if(!seen[n]&&on(nx,ny)){seen[n]=1;st.push(n)}}}
+      blobs.push(b);
+    }
+    for(let merged=true;merged;){merged=false;
+      for(let a=0;a<blobs.length&&!merged;a++)for(let c=a+1;c<blobs.length;c++){const A=blobs[a],B=blobs[c];
+        if(A.x0-2<=B.x1&&B.x0-2<=A.x1&&A.y0-2<=B.y1&&B.y0-2<=A.y1){
+          A.x0=Math.min(A.x0,B.x0);A.x1=Math.max(A.x1,B.x1);A.y0=Math.min(A.y0,B.y0);A.y1=Math.max(A.y1,B.y1);
+          A.pix=A.pix.concat(B.pix);blobs.splice(c,1);merged=true;break}}}
+    const sw=blobs.filter(b=>b.pix.length>=30&&b.x1-b.x0>=3&&b.y1-b.y0>=3);   // pas les filets de couleur
+    // pastilles grises (béton, enrobé gris…) : aplat gris uni, entouré ou non d'un trait noir.
+    // Les mots du texte forment aussi des taches sombres, mais sans aplat gris qui remplit leur cadre.
+    const dark=(x,y)=>{const i=(y*W+x)*4;return d[i+3]>=128&&!chroma(d[i],d[i+1],d[i+2])&&Math.max(d[i],d[i+1],d[i+2])<245};
+    const seen2=new Uint8Array(zw*zh);
+    for(let y=zy0;y<zy1;y++)for(let x=zx0;x<zx1;x++){
+      const s0=(y-zy0)*zw+(x-zx0);if(seen2[s0]||!dark(x,y))continue;
+      const b={x0:x,x1:x,y0:y,y1:y,pix:[]},st=[s0];seen2[s0]=1;
+      while(st.length){const q=st.pop(),qx=q%zw+zx0,qy=(q/zw|0)+zy0,i=(qy*W+qx)*4;
+        b.pix.push([d[i],d[i+1],d[i+2]]);if(qx<b.x0)b.x0=qx;if(qx>b.x1)b.x1=qx;if(qy<b.y0)b.y0=qy;if(qy>b.y1)b.y1=qy;
+        for(const [nx,ny] of [[qx-1,qy],[qx+1,qy],[qx,qy-1],[qx,qy+1]]){
+          if(nx<zx0||nx>=zx1||ny<zy0||ny>=zy1)continue;const n=(ny-zy0)*zw+(nx-zx0);
+          if(!seen2[n]&&dark(nx,ny)){seen2[n]=1;st.push(n)}}}
+      const bw=b.x1-b.x0+1,bh=b.y1-b.y0+1;if(bw<8||bh<6)continue;
+      if(sw.some(o=>o.x0<=b.x1&&b.x0<=o.x1&&o.y0<=b.y1&&b.y0<=o.y1))continue;   // déjà une pastille de couleur
+      const cl=[];
+      b.pix.forEach(p=>{const l=(p[0]+p[1]+p[2])/3;if(l<70||l>242)return;
+        const c=cl.find(c=>dist(c.m,p)<16);
+        if(c){c.n++;for(let q=0;q<3;q++){c.s[q]+=p[q];c.m[q]=c.s[q]/c.n}}else cl.push({n:1,s:[...p],m:[...p]})});
+      const top=cl.sort((a,b)=>b.n-a.n)[0];
+      if(top&&top.n>=bw*bh*.4)sw.push({...b,cols:[top.m.map(Math.round)]});
+    }
+    // textes de la zone, regroupés en lignes
+    const T=texts.map(t=>({s:t.s,x0:t.x*W,x1:(t.x+t.w)*W,y0:t.y*H,y1:(t.y+t.h)*H}))
+      .filter(t=>t.s.trim()&&t.x0>=L.x0-2&&t.x1<=L.x1+2&&t.y1>=L.y0&&t.y0<=L.y1)
+      .sort((a,b)=>(a.y0+a.y1)-(b.y0+b.y1));
+    const lines=[];
+    T.forEach(t=>{const yc=(t.y0+t.y1)/2,h=t.y1-t.y0;
+      const ln=lines.find(l=>Math.abs(l.yc-yc)<Math.max(l.h,h)*.5);
+      if(ln){ln.ts.push(t);ln.y0=Math.min(ln.y0,t.y0);ln.y1=Math.max(ln.y1,t.y1);ln.yc=(ln.y0+ln.y1)/2}else lines.push({yc,h,y0:t.y0,y1:t.y1,ts:[t]})});
+    lines.forEach(l=>l.ts.sort((a,b)=>a.x0-b.x0));
+    // libellé d'une pastille : la ligne de texte la plus proche de son centre, juste à sa droite
+    const used=new Set(),out=[];
+    sw.map(b=>{
+      const yc=(b.y0+b.y1)/2,bh=b.y1-b.y0+1;let best=null,bd=1e9;
+      lines.forEach(l=>{if(Math.abs(l.yc-yc)>Math.max(bh,l.h)*.75)return;
+        const t=l.ts.find(t=>t.x0>=b.x1-2);if(!t||t.x0-b.x1>Math.max(bh*4,l.h*6))return;
+        const dd=Math.abs(l.yc-yc)+(t.x0-b.x1)*.1;if(dd<bd){bd=dd;best={l,t}}});
+      return {b,...(best||{l:null,t:null})};   // pastille sans texte lisible : gardée quand même
+    }).sort((a,b)=>a.b.y0-b.b.y0||a.b.x0-b.b.x0).forEach(({b,l,t})=>{
+      // texte jusqu'au prochain grand blanc ou à la pastille suivante sur la même ligne
+      let text='';
+      if(l){
+      const next=sw.filter(o=>o!==b&&o.x0>b.x1&&o.y1>=l.y0&&o.y0<=l.y1).reduce((m,o)=>Math.min(m,o.x0),1e9);
+      let end=null;
+      for(const u of l.ts){if(u.x0<t.x0||u.x0>=next)continue;if(end!=null&&u.x0-end>l.h*3)break;
+        text+=(end!=null&&u.x0-end>1?' ':'')+u.s;end=u.x1;used.add(u)}
+      // suite du libellé sur les lignes du dessous, alignée et sans pastille devant
+      let y1=l.y1;
+      for(const l2 of lines){if(l2.y0<y1-2||l2.y0-y1>l2.h*.8)continue;
+        const u=l2.ts.find(u=>Math.abs(u.x0-t.x0)<l.h&&!used.has(u));if(!u)continue;
+        if(sw.some(o=>o!==b&&o.x1<=u.x0+2&&u.x0-o.x1<l.h*6&&o.y1>=l2.y0&&o.y0<=l2.y1))continue;
+        text+=' '+u.s;used.add(u);y1=l2.y1}
+      text=text.replace(/\s+/g,' ').trim();
+      }
+      const cl=[];
+      b.pix.forEach(p=>{const c=cl.find(c=>dist(c.m,p)<48);
+        if(c){c.n++;for(let q=0;q<3;q++){c.s[q]+=p[q];c.m[q]=c.s[q]/c.n}}else cl.push({n:1,s:[...p],m:[...p]})});
+      const cols=b.cols||cl.filter(c=>c.n>=b.pix.length*.15).sort((a,b)=>b.n-a.n).map(c=>c.m.map(Math.round));
+      if(cols.length)out.push({text,cols,pos:[b.y0,b.x0]});
+    });
+    return out;
+  }
+  /* Analyse des couleurs d'une page (non pivotée).
+     Avec une légende lue : une ligne par ligne de légende, chaque pixel du plan allant à la pastille
+     la plus proche ; les autres couleurs du plan restent des lignes à part. */
+  function analyzeColors(cv,legs,texts,excl){
     const W=cv.width,H=cv.height,d=cv.getContext('2d',{willReadFrequently:true}).getImageData(0,0,W,H).data;
-    // Zones de légende (la première est prioritaire pour les libellés) : exclues des surfaces
-    const Ls=(legs||[]).map(g=>({tag:g.tag||'leg',x0:g.x*W,x1:(g.x+g.w)*W,y0:g.y*H,y1:(g.y+g.h)*H}));
-    const rowZ=y=>Ls.filter(L=>y>=L.y0&&y<L.y1);
+    // Zones de légende (la première est prioritaire) et zones exclues : pas comptées dans les surfaces
+    const box=g=>({tag:g.tag||'leg',x0:g.x*W,x1:(g.x+g.w)*W,y0:g.y*H,y1:(g.y+g.h)*H});
+    const Ls=(legs||[]).map(box),Xs=[...Ls,...(excl||[]).map(box)];
+    const rowZ=y=>Xs.filter(L=>y>=L.y0&&y<L.y1);
     const inZ=(Z,x)=>{for(const L of Z)if(x>=L.x0&&x<L.x1)return true;return false};
+    const ents=[];
+    Ls.forEach(L=>legendEntries(d,W,H,L,texts||[]).forEach(e=>{
+      if(ents.some(o=>o.tag!==L.tag&&o.text===e.text&&e.text&&dist(o.cols[0],e.cols[0])<24))return;   // même ligne dans les deux zones
+      ents.push({...e,tag:L.tag})}));
+    // couleurs des pastilles : teintes (EC) et gris (GE, comptés à part pour ne pas prendre les traits)
+    const EC=[],GE=[];ents.forEach((e,k)=>e.cols.forEach(rgb=>(chroma(...rgb)?EC:GE).push({rgb,k})));
+    const nearEnt=(R,G,B)=>{let best=-1,bd=2304;for(const c of EC){const dr=c.rgb[0]-R,dg=c.rgb[1]-G,db=c.rgb[2]-B,dd=dr*dr+dg*dg+db*db;if(dd<bd){bd=dd;best=c.k}}return best};
     const bins=new Map();let total=0;
     for(let y=0;y<H;y++){
       const Z=rowZ(y);
@@ -696,13 +1045,14 @@ body.noscroll{overflow:hidden}
         if(Z.length&&inZ(Z,x))continue;                 // la légende ne compte pas dans les surfaces
         const i=(y*W+x)*4;if(d[i+3]<128)continue;
         const R=d[i],G=d[i+1],B=d[i+2];
-        if(Math.max(R,G,B)-Math.min(R,G,B)<24)continue; // blanc, noir, gris (traits, fond, texte)
+        if(!chroma(R,G,B))continue;
+        total++;if(EC.length&&nearEnt(R,G,B)>=0)continue;   // couleur d'une ligne de légende
         const k=(R>>4)<<8|(G>>4)<<4|(B>>4);
         let b=bins.get(k);if(!b){b={n:0,r:0,g:0,b:0};bins.set(k,b)}
-        b.n++;b.r+=R;b.g+=G;b.b+=B;total++;
+        b.n++;b.r+=R;b.g+=G;b.b+=B;
       }
     }
-    if(!total)return [];
+    if(!total&&!ents.length)return [];
     // Regroupe les teintes proches (anticrénelage, légères variations)
     const cl=[];
     [...bins.values()].sort((a,b)=>b.n-a.n).forEach(b=>{
@@ -710,56 +1060,74 @@ body.noscroll{overflow:hidden}
       const c=cl.find(c=>dist(c.rgb,m)<48);
       if(c){c.r+=b.r;c.g+=b.g;c.b+=b.b;c.n+=b.n}else cl.push({n:b.n,r:b.r,g:b.g,b:b.b,rgb:m});
     });
-    let res=cl.map(c=>({n:c.n,rgb:[c.r/c.n,c.g/c.n,c.b/c.n].map(Math.round)}))
-      .filter(c=>c.n>=Math.max(total*0.01,150));
-    const kept=res.reduce((s,c)=>s+c.n,0);
-    res.forEach(c=>{c.pct=c.n/kept*100;c.key=c.rgb.map(v=>(v>>3).toString(16).padStart(2,'0')).join('')});
-    // Aire et périmètre (en pixels) de chaque couleur, pour les propositions de mesure
-    if(res.length&&res.length<128){
-      const lab=new Int8Array(W*H).fill(-1),area=new Float64Array(res.length),per=new Float64Array(res.length);
-      for(let y=0;y<H;y++){
-        const Z=rowZ(y);
-        for(let x=0;x<W;x++){
-          if(Z.length&&inZ(Z,x))continue;
-          const p=y*W+x,i=p*4;if(d[i+3]<128)continue;
-          const R=d[i],G=d[i+1],B=d[i+2];
-          if(Math.max(R,G,B)-Math.min(R,G,B)<24)continue;
-          let best=-1,bd=2304;
-          for(let j=0;j<res.length;j++){const c=res[j].rgb,dr=c[0]-R,dg=c[1]-G,db=c[2]-B,dd=dr*dr+dg*dg+db*db;if(dd<bd){bd=dd;best=j}}
-          if(best>=0){lab[p]=best;area[best]++}
-        }
+    const hex=rgb=>rgb.map(v=>(v>>3).toString(16).padStart(2,'0')).join('');
+    // libellé illisible (texte vectorisé, image) : « Légende n°… » dans l'ordre de la légende, à renommer
+    const E=ents.map((e,k)=>({n:0,rgb:e.cols[0],rgbs:e.cols,legendText:e.text?e.text.slice(0,80):'Légende n°'+(ents.slice(0,k+1).filter(o=>o.tag===e.tag).length),legendTag:e.tag,legendPos:e.pos}));
+    E.forEach((c,k)=>{c.key='L'+hex(c.rgb);if(E.slice(0,k).some(o=>o.key===c.key))c.key+='-'+k});
+    const C=cl.map(c=>({n:c.n,rgb:[c.r/c.n,c.g/c.n,c.b/c.n].map(Math.round)}))
+      .filter(c=>c.n>=Math.max(total*0.01,150)).slice(0,500);
+    C.forEach(c=>c.key=hex(c.rgb));
+    const res=[...E,...C],nE=E.length;
+    // Aire et périmètre (en pixels) de chaque ligne, pour les propositions de mesure
+    const lab=new Int16Array(W*H).fill(-1),area=new Float64Array(res.length),per=new Float64Array(res.length);
+    for(let y=0;y<H;y++){
+      const Z=rowZ(y);
+      for(let x=0;x<W;x++){
+        const p=y*W+x,i=p*4;
+        if(Z.length&&inZ(Z,x)||d[i+3]<128){lab[p]=-2;continue}   // -2 : légende ou transparent, -1 : blanc/noir/gris
+        const R=d[i],G=d[i+1],B=d[i+2];
+        if(!chroma(R,G,B))continue;
+        let best=EC.length?nearEnt(R,G,B):-1;
+        if(best<0){let bd=2304;for(let j=0;j<C.length;j++){const c=C[j].rgb,dr=c[0]-R,dg=c[1]-G,db=c[2]-B,dd=dr*dr+dg*dg+db*db;if(dd<bd){bd=dd;best=nE+j}}}
+        if(best>=0)lab[p]=best;
       }
-      for(let y=0;y<H;y++)for(let x=0;x<W;x++){
-        const p=y*W+x,j=lab[p];if(j<0)continue;
-        if(x===0||lab[p-1]!==j)per[j]++;if(x===W-1||lab[p+1]!==j)per[j]++;
-        if(y===0||lab[p-W]!==j)per[j]++;if(y===H-1||lab[p+W]!==j)per[j]++;
-      }
-      res.forEach((c,j)=>{c.area=area[j];c.per=per[j]*Math.PI/4});   // contour en escalier → longueur réelle
     }
-    // Pastille de chaque couleur dans la légende → texte écrit à sa droite
-    if(texts&&texts.length)for(const L of Ls){
-      const bx=res.map(()=>({n:0,x0:1e9,y0:1e9,x1:-1,y1:-1}));
-      for(let y=Math.max(0,L.y0|0);y<Math.min(H,L.y1);y++)for(let x=Math.max(0,L.x0|0);x<Math.min(W,L.x1);x++){
-        const i=(y*W+x)*4;const p=[d[i],d[i+1],d[i+2]];
-        if(Math.max(...p)-Math.min(...p)<24)continue;
-        let best=-1,bd=40;res.forEach((c,j)=>{const dd=dist(c.rgb,p);if(dd<bd){bd=dd;best=j}});
-        if(best<0)continue;const b=bx[best];b.n++;
-        if(x<b.x0)b.x0=x;if(x>b.x1)b.x1=x;if(y<b.y0)b.y0=y;if(y>b.y1)b.y1=y;
+    /* Aplats gris des pastilles grises : un pixel compte s'il a la teinte et ses 8 voisins aussi
+       (les traits noirs et leur anticrénelage gris sont ainsi écartés), puis on rajoute le bord de l'aplat. */
+    if(GE.length){
+      const near=(i,c)=>{const dr=d[i]-c[0],dg=d[i+1]-c[1],db=d[i+2]-c[2];return dr*dr+dg*dg+db*db<400};
+      const add=new Int16Array(W*H).fill(-1);
+      for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++){
+        const p=y*W+x;if(lab[p]!==-1)continue;
+        for(const g of GE){if(!near(p*4,g.rgb))continue;let ok=true;
+          for(let dy=-1;dy<=1&&ok;dy++)for(let dx=-1;dx<=1;dx++){const q=p+dy*W+dx;if(lab[q]===-2||!near(q*4,g.rgb)){ok=false;break}}
+          if(ok){add[p]=g.k;break}}
       }
-      const T=texts.map(t=>({s:t.s,x0:t.x*W,x1:(t.x+t.w)*W,y0:t.y*H,y1:(t.y+t.h)*H}))
-        .filter(t=>t.x0>=L.x0-2&&t.x0<=L.x1&&t.y1>=L.y0&&t.y0<=L.y1);
-      res.forEach((c,j)=>{
-        const b=bx[j];if(b.n<20||c.legendText)return;   // déjà nommée par une zone prioritaire
-        const h=b.y1-b.y0,yc=(b.y0+b.y1)/2;
-        const line=T.filter(t=>t.x0>=b.x1-2&&t.y0<=yc+h*.6+2&&t.y1>=yc-h*.6-2).sort((a,b)=>a.x0-b.x0);
-        if(!line.length||line[0].x0-b.x1>W*.15)return;
-        let out=line[0].s,end=line[0].x1;
-        for(const t of line.slice(1)){if(t.x0-end>(t.y1-t.y0)*3)break;out+=(t.x0-end>1?' ':'')+t.s;end=t.x1}
-        out=out.replace(/\s+/g,' ').trim();
-        if(out){c.legendText=out.slice(0,80);c.legendTag=L.tag;c.legendPos=[b.y0,b.x0]}   // position dans la légende : ordre d'affichage
-      });
+      for(let p=0;p<W*H;p++)if(add[p]>=0)lab[p]=add[p];
+      for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++){
+        const p=y*W+x;if(lab[p]!==-1)continue;
+        for(const q of [p-1,p+1,p-W,p+W]){const k=add[q];if(k>=0&&GE.some(g=>g.k===k&&near(p*4,g.rgb))){lab[p]=k;break}}
+      }
     }
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+      const p=y*W+x,j=lab[p];if(j<0)continue;area[j]++;
+      if(x===0||lab[p-1]!==j)per[j]++;if(x===W-1||lab[p+1]!==j)per[j]++;
+      if(y===0||lab[p-W]!==j)per[j]++;if(y===H-1||lab[p+W]!==j)per[j]++;
+    }
+    res.forEach((c,j)=>{c.j=j;c.area=area[j];c.per=per[j]*Math.PI/4});   // contour en escalier → longueur réelle
+    E.forEach(c=>c.n=c.area);
+    const kept=res.reduce((s,c)=>s+c.n,0)||1;res.forEach(c=>c.pct=c.n/kept*100);
+    Object.defineProperty(res,'px',{value:{lab,W,H}});
     return res.sort((a,b)=>b.n-a.n);
+  }
+  /* Marquage compté dans les surfaces : chaque pixel de marquage (traits blancs/noirs/gris, ou couleur
+     désignée comme marquage) pris entre deux pixels d'une même surface, à gauche/droite ou en haut/en bas
+     à moins de R pixels, est ajouté à cette surface et retiré de la surface du marquage. */
+  function fillMarking(res,isMark,mpp){
+    const px=res.px;if(!px)return;
+    // portée : 1,5 m de part et d'autre si l'échelle est connue, sinon 2,5 % de la page
+    const {lab,W,H}=px,R=Math.min(120,Math.max(4,Math.round(mpp?1.5/mpp:Math.max(W,H)*.025)));
+    const byJ=[];res.forEach(c=>{byJ[c.j]=c;c.markAdd=0;c.markOut=0});
+    const mark=byJ.map(c=>!!c&&isMark(c));
+    const surf=j=>j>=0&&!mark[j];
+    const seek=(p,step,lim)=>{for(let k=1,q=p+step;k<=R&&k<=lim;k++,q+=step){const j=lab[q];if(j===-2)return -9;if(surf(j))return j}return -9};
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+      const p=y*W+x,j=lab[p];
+      if(!(j===-1||(j>=0&&mark[j])))continue;
+      let t=seek(p,-1,x);if(t<0||t!==seek(p,1,W-1-x)){t=seek(p,-W,y);if(t<0||t!==seek(p,W,H-1-y))continue}
+      byJ[t].markAdd++;if(j>=0)byJ[j].markOut++;
+    }
+    res.forEach(c=>{c.area+=c.markAdd-c.markOut});
   }
   // Échelle écrite sur le plan (« Échelle : 1/200 », « Ech. 1:500 », sinon un « 1/200 » isolé)
   function detectScale(texts){
@@ -803,8 +1171,8 @@ body.noscroll{overflow:hidden}
     const im=g.getImageData(0,0,cv.width,cv.height),d=im.data;
     for(let i=0;i<d.length;i+=4){
       const R=d[i],G=d[i+1],B=d[i+2];
-      if(Math.max(R,G,B)-Math.min(R,G,B)>=24){
-        let hit=null;for(const c of cols){const dr=c.rgb[0]-R,dg=c.rgb[1]-G,db=c.rgb[2]-B;if(dr*dr+dg*dg+db*db<2304){hit=c;break}}
+      if(Math.max(R,G,B)<245||chroma(R,G,B)){
+        let hit=null;for(const c of cols){const dr=c.rgb[0]-R,dg=c.rgb[1]-G,db=c.rgb[2]-B;if(dr*dr+dg*dg+db*db<(chroma(...c.rgb)?2304:400)){hit=c;break}}
         if(hit){if(hit.f!==1){const f=hit.f;d[i]=255-(255-R)*f;d[i+1]=255-(255-G)*f;d[i+2]=255-(255-B)*f}continue}
       }
       d[i]=R+(255-R)*.82;d[i+1]=G+(255-G)*.82;d[i+2]=B+(255-B)*.82;
@@ -813,10 +1181,13 @@ body.noscroll{overflow:hidden}
   }
   // Affiche l'aperçu filtré ; les mises à jour rapides (curseur) sont regroupées par image
   function presenter(view,label){
-    let raw=null,filter=[],queued=false;
-    const show=()=>{queued=false;if(!raw)return;const cv=highlight(raw,filter);cv.setAttribute('aria-label',label);view.innerHTML='';view.appendChild(cv)};
+    let raw=null,filter=[],queued=false,overlay=null;
+    const show=()=>{queued=false;if(!raw)return;
+      if(raw.width&&raw.height)view.style.setProperty('--ar',(raw.width+20)/(raw.height+20));   // + marge intérieure de 10 px
+      const cv=highlight(raw,filter);if(overlay)overlay(cv);cv.setAttribute('aria-label',label);view.innerHTML='';view.appendChild(cv)};
     return {
       setRaw:c=>{raw=c;show()},
+      setOverlay:f=>{overlay=f;show()},
       setFilter:cols=>{const s=JSON.stringify(cols);if(s===JSON.stringify(filter))return;filter=cols;
         if(!queued){queued=true;requestAnimationFrame(show)}}
     };
@@ -832,7 +1203,7 @@ body.noscroll{overflow:hidden}
       img.onerror=()=>{view.innerHTML='<span class="msg">Impossible d\'afficher cette image.</span>';rej()};
     });
     img.src=url;
-    return {redraw:draw,page:()=>1,pages:()=>1,setFilter:pres.setFilter,
+    return {redraw:draw,page:()=>1,pages:()=>1,setFilter:pres.setFilter,setOverlay:pres.setOverlay,
       crop:async rect=>{await loaded;return cropTo(img,img.naturalWidth,img.naturalHeight,rect,r.rot||0)},
       source:async()=>{await loaded;
         const k=Math.min(1,1500/Math.max(img.naturalWidth,img.naturalHeight));
@@ -840,15 +1211,22 @@ body.noscroll{overflow:hidden}
         cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);return {canvas:cv,texts:[]}}};
   }
   function showPdf(r,view,pager){
-    let draw=()=>{},n=1,doc=null,docP;const pres=presenter(view,r.name);
-    const api={redraw:()=>draw(),page:()=>n,pages:()=>doc?doc.numPages:1,setFilter:pres.setFilter,
+    let draw=()=>{},n=1,doc=null,docP,ocP,oc=null;const pres=presenter(view,r.name);
+    // Calques : r.ocg = {id du calque: visible} ne garde que les choix faits à la main
+    const ocList=()=>{const G=oc?.getGroups?.();if(!G)return [];
+      const ids=(oc.getOrder?.()||[]).flat(Infinity).map(o=>typeof o==='string'?o:null).filter(id=>id&&G[id]);
+      const all=[...new Set([...ids,...Object.keys(G)])];
+      return all.map(id=>({id,name:G[id].name||'(sans nom)',visible:G[id].visible!==false}))};
+    const rnd=async(page,ctx,vp)=>{await ocP;
+      return page.render(oc?{canvasContext:ctx,viewport:vp,optionalContentConfigPromise:Promise.resolve(oc)}:{canvasContext:ctx,viewport:vp}).promise};
+    const api={redraw:()=>draw(),page:()=>n,pages:()=>doc?doc.numPages:1,setFilter:pres.setFilter,setOverlay:pres.setOverlay,
       crop:async rect=>{
         const d=await docP;const page=await d.getPage(Math.min(rect.page||1,d.numPages));
         const rotation=page.rotate||0;const base=page.getViewport({scale:1,rotation});
         const scale=Math.min(1600/Math.max(rect.w*base.width,rect.h*base.height,1),Math.sqrt(16e6/(base.width*base.height)));
         const vp=page.getViewport({scale,rotation});
         const cv=document.createElement('canvas');cv.width=vp.width;cv.height=vp.height;
-        await page.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise;
+        await rnd(page,cv.getContext('2d'),vp);
         return cropTo(cv,cv.width,cv.height,rect,r.rot||0);
       },
       // Page non pivotée pour l'analyse : image + textes (positions en fractions de page)
@@ -857,7 +1235,7 @@ body.noscroll{overflow:hidden}
         const rotation=page.rotate||0;const base=page.getViewport({scale:1,rotation});
         const vp=page.getViewport({scale:Math.min(1500/Math.max(base.width,base.height),4),rotation});
         const cv=document.createElement('canvas');cv.width=Math.round(vp.width);cv.height=Math.round(vp.height);
-        await page.render({canvasContext:cv.getContext('2d',{willReadFrequently:true}),viewport:vp}).promise;
+        await rnd(page,cv.getContext('2d',{willReadFrequently:true}),vp);
         let texts=[];
         try{
           const tc=await page.getTextContent();
@@ -869,11 +1247,17 @@ body.noscroll{overflow:hidden}
           }).filter(Boolean);
         }catch(e){}
         return {canvas:cv,texts,ptPerPx:1/vp.scale};
-      }};
+      },
+      layers:async()=>{await ocP;return ocList()},
+      layersNow:ocList,
+      setLayer:(id,v)=>{if(!oc)return;oc.setVisibility(id,v);(r.ocg=r.ocg||{})[id]=v}};
     if(!window.pdfjsLib){view.innerHTML='<span class="msg">Aperçu PDF indisponible (lecteur PDF non chargé).</span>';docP=Promise.reject(new Error('pdf'));docP.catch(()=>{});return api}
     pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     docP=r.blob.arrayBuffer().then(b=>pdfjsLib.getDocument({data:new Uint8Array(b)}).promise);
     docP.catch(()=>{});
+    ocP=docP.then(d=>d.getOptionalContentConfig()).then(c=>{oc=c;
+      const G=c?.getGroups?.()||{};for(const[id,v]of Object.entries(r.ocg||{}))if(G[id])c.setVisibility(id,v);
+      return c}).catch(()=>null);
     (async()=>{try{
       doc=await docP;
       let tok=0;const label=pager.querySelector('b');
@@ -887,11 +1271,14 @@ body.noscroll{overflow:hidden}
         const scale=Math.min(fit*dpr*1.5,3000/Math.max(base.width,base.height));
         const vp=page.getViewport({scale,rotation});
         const cv=document.createElement('canvas');cv.width=vp.width;cv.height=vp.height;
-        await page.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise;
+        await rnd(page,cv.getContext('2d'),vp);
         if(my!==tok)return;
         pres.setRaw(cv);
         api.onPage?.();
       };
+      // l'encadré change de taille (proportions du plan, rotation, plein écran) : nouveau rendu net
+      let lastW=0,rT;new ResizeObserver(()=>{const w=view.clientWidth,h=view.clientHeight;
+        if(Math.abs(w*h-lastW)/Math.max(lastW,1)<.15)return;lastW=w*h;clearTimeout(rT);rT=setTimeout(()=>draw(),150)}).observe(view);
       pager.hidden=doc.numPages<2;
       if(doc.numPages>1){
         let acc=0,last=0;
