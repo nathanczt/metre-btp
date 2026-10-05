@@ -522,7 +522,7 @@ body.noscroll{overflow:hidden}
         addPlan(r).catch(()=>{});api.redraw();legend.render();
       });
       const fs=setupFullscreen(box.querySelector('.pane'),box.querySelector('.full-btn'),api);
-      if(!isImg)setupLayers(r,box,api,legend,fs);
+      if(dwg)setupLayers(r,box,api,legend,fs);   // liste des calques : DWG seulement
     });
   }
 
@@ -1622,9 +1622,8 @@ body.noscroll{overflow:hidden}
     pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     docP=r.blob.arrayBuffer().then(b=>pdfjsLib.getDocument({data:new Uint8Array(b)}).promise);
     docP.catch(()=>{});
-    ocP=docP.then(d=>d.getOptionalContentConfig()).then(c=>{oc=c;
-      const G=c?.getGroups?.()||{};for(const[id,v]of Object.entries(r.ocg||{}))if(G[id])c.setVisibility(id,v);
-      return c}).catch(()=>null);
+    // PDF : calques affichés tels que le PDF les définit (pas de gel des calques, réservé aux DWG)
+    ocP=docP.then(d=>d.getOptionalContentConfig()).then(c=>{oc=c;return c}).catch(()=>null);
     (async()=>{try{
       doc=await docP;
       let tok=0;const label=pager.querySelector('b');
