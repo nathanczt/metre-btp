@@ -178,7 +178,9 @@ main p{color:var(--muted);margin:6px 0 0}
 .use-crop{display:flex;justify-content:center;align-items:center;min-width:0}
 .use-body.split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:start}
 .use-sel{min-width:0;border-left:1px solid var(--side-line);padding-left:18px}
-.use-list .nm{min-width:0;font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+.use-list .nm{min-width:0;font-size:13.5px;font-weight:600;border:1px solid transparent;background:transparent;border-radius:4px;padding:3px 6px;margin-left:-6px;text-overflow:ellipsis}
+.use-list .nm:hover{border-color:var(--side-line)}
+.use-list .nm:focus{border-color:var(--accent);background:var(--white);outline:none}
 .use-list .uq{font-size:12.5px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
 @media (max-width:900px){.use-body.split{grid-template-columns:minmax(0,1fr)}.use-sel{border-left:0;padding-left:0;border-top:1px solid var(--side-line);padding-top:12px}}
 .use-body canvas{display:block;max-width:100%;max-height:60vh;width:auto;height:auto;box-shadow:0 1px 6px rgba(28,37,48,.12)}
@@ -657,20 +659,23 @@ body.noscroll{overflow:hidden}
       buildStruct(rows);
       useList.innerHTML='';
       if(!rows.length){useInfo.textContent='';
-        useList.innerHTML='<li class="msg">Aucune couleur de cette légende n\'a été retrouvée sur cette page du plan.</li>';return}
+        useList.innerHTML='<li class="msg">Aucune pastille de couleur trouvée dans la zone tracée. Vérifiez que le rectangle englobe bien les pastilles de la légende (bouton « Changer la zone »).</li>';buildStruct(rows);return}
       rows.forEach(it=>{
         const li=document.createElement('li'),on=(r.selected||[]).includes(it.key);
         li.className=on?'on':'';
         li.innerHTML=`<input type="checkbox" class="pick"${on?' checked':''} aria-label="Sélectionner cette zone">
           <span class="sws">${it.members.map(c=>`<span class="sw" style="background:rgb(${c.rgb.join(',')})"></span>`).join('')}</span>
-          <span class="nm"></span><span class="uq"></span>
+          <input class="nm" aria-label="Nom de la zone" title="Nom de la zone (modifiable)"><span class="uq"></span>
           <div class="prop">${it.group?'<button class="sm use-split" title="Séparer ce groupe en couleurs individuelles">Dégrouper</button>':''}<span class="seg" role="group" aria-label="Type de mesure"><button data-k="m2" title="Mesure en surface (m²)">Surface</button><button data-k="ml" title="Mesure en linéaire (ml)">Linéaire</button></span>
             <label class="ctr-l"${on?'':' hidden'}>Contraste <input type="range" class="ctr" min="-100" max="100" step="5" value="${(r.contrast||{})[it.key]||0}" title="Contraste de cette zone sur le plan (double-clic : réinitialiser)"></label></div>`;
-        const nm=li.querySelector('.nm');nm.textContent=nm.title=(r.labels||{})[it.key]??it.auto;
+        const nm=li.querySelector('.nm');nm.value=(r.labels||{})[it.key]??it.auto;
+        // renommer : même libellé que dans le récapitulatif (r.labels)
+        nm.onchange=()=>{const v=nm.value.trim();r.labels=r.labels||{};if(v&&v!==it.auto)r.labels[it.key]=v;else delete r.labels[it.key];
+          const src=it.li&&it.li.querySelector('.lab');if(src)src.value=r.labels[it.key]??it.auto;addPlan(r).catch(()=>{});fillProp(it)};
         li.querySelector('.uq').textContent=it.li?.querySelector('.qty')?.textContent||'';
         const cbx=li.querySelector('.pick');
         cbx.onchange=()=>{const src=it.li&&it.li.querySelector('.pick');if(src){src.checked=cbx.checked;src.onchange()}};
-        li.querySelector('.sws').onclick=nm.onclick=()=>{cbx.checked=!cbx.checked;cbx.onchange()};
+        li.querySelector('.sws').onclick=()=>{cbx.checked=!cbx.checked;cbx.onchange()};
         // Surface / linéaire : même choix que dans le récapitulatif (masqué)
         li.querySelectorAll('.seg button').forEach(b=>{
           const src=it.li&&it.li.querySelector(`.seg button[data-k="${b.dataset.k}"]`);
@@ -881,7 +886,9 @@ body.noscroll{overflow:hidden}
     return {render};
   }
 
-  const chroma=(R,G,B)=>Math.max(R,G,B)-Math.min(R,G,B)>=24;   // sinon blanc, noir, gris (traits, fond, texte)
+  // Couleur de remplissage : assez saturée, ou teinte pâle (gris bleuté, vert d'eau…) distincte du blanc du papier.
+  // Sinon blanc, noir, gris neutre (traits, fond, texte).
+  const chroma=(R,G,B)=>Math.max(R,G,B)-Math.min(R,G,B)>=10;
   /* Lignes d'une zone de légende : chaque pastille de couleur et le libellé écrit à sa droite forment une ligne.
      Renvoie [{text, cols:[[r,g,b]…] (couleurs de la pastille), pos:[y,x]}]. */
   function legendEntries(d,W,H,L,texts){
@@ -905,7 +912,7 @@ body.noscroll{overflow:hidden}
         if(A.x0-2<=B.x1&&B.x0-2<=A.x1&&A.y0-2<=B.y1&&B.y0-2<=A.y1){
           A.x0=Math.min(A.x0,B.x0);A.x1=Math.max(A.x1,B.x1);A.y0=Math.min(A.y0,B.y0);A.y1=Math.max(A.y1,B.y1);
           A.pix=A.pix.concat(B.pix);blobs.splice(c,1);merged=true;break}}}
-    const sw=blobs.filter(b=>b.pix.length>=12);
+    const sw=blobs.filter(b=>b.pix.length>=30&&b.x1-b.x0>=3&&b.y1-b.y0>=3);   // pas les filets de couleur
     // textes de la zone, regroupés en lignes
     const T=texts.map(t=>({s:t.s,x0:t.x*W,x1:(t.x+t.w)*W,y0:t.y*H,y1:(t.y+t.h)*H}))
       .filter(t=>t.s.trim()&&t.x0>=L.x0-2&&t.x1<=L.x1+2&&t.y1>=L.y0&&t.y0<=L.y1)
@@ -922,11 +929,13 @@ body.noscroll{overflow:hidden}
       lines.forEach(l=>{if(Math.abs(l.yc-yc)>Math.max(bh,l.h)*.75)return;
         const t=l.ts.find(t=>t.x0>=b.x1-2);if(!t||t.x0-b.x1>Math.max(bh*4,l.h*6))return;
         const dd=Math.abs(l.yc-yc)+(t.x0-b.x1)*.1;if(dd<bd){bd=dd;best={l,t}}});
-      return best&&{b,...best};
-    }).filter(Boolean).sort((a,b)=>a.b.y0-b.b.y0||a.b.x0-b.b.x0).forEach(({b,l,t})=>{
+      return {b,...(best||{l:null,t:null})};   // pastille sans texte lisible : gardée quand même
+    }).sort((a,b)=>a.b.y0-b.b.y0||a.b.x0-b.b.x0).forEach(({b,l,t})=>{
       // texte jusqu'au prochain grand blanc ou à la pastille suivante sur la même ligne
+      let text='';
+      if(l){
       const next=sw.filter(o=>o!==b&&o.x0>b.x1&&o.y1>=l.y0&&o.y0<=l.y1).reduce((m,o)=>Math.min(m,o.x0),1e9);
-      let text='',end=null;
+      let end=null;
       for(const u of l.ts){if(u.x0<t.x0||u.x0>=next)continue;if(end!=null&&u.x0-end>l.h*3)break;
         text+=(end!=null&&u.x0-end>1?' ':'')+u.s;end=u.x1;used.add(u)}
       // suite du libellé sur les lignes du dessous, alignée et sans pastille devant
@@ -935,7 +944,8 @@ body.noscroll{overflow:hidden}
         const u=l2.ts.find(u=>Math.abs(u.x0-t.x0)<l.h&&!used.has(u));if(!u)continue;
         if(sw.some(o=>o!==b&&o.x1<=u.x0+2&&u.x0-o.x1<l.h*6&&o.y1>=l2.y0&&o.y0<=l2.y1))continue;
         text+=' '+u.s;used.add(u);y1=l2.y1}
-      text=text.replace(/\s+/g,' ').trim();if(!text)return;
+      text=text.replace(/\s+/g,' ').trim();
+      }
       const cl=[];
       b.pix.forEach(p=>{const c=cl.find(c=>dist(c.m,p)<48);
         if(c){c.n++;for(let q=0;q<3;q++){c.s[q]+=p[q];c.m[q]=c.s[q]/c.n}}else cl.push({n:1,s:[...p],m:[...p]})});
@@ -955,8 +965,8 @@ body.noscroll{overflow:hidden}
     const rowZ=y=>Xs.filter(L=>y>=L.y0&&y<L.y1);
     const inZ=(Z,x)=>{for(const L of Z)if(x>=L.x0&&x<L.x1)return true;return false};
     const ents=[];
-    if(texts&&texts.length)Ls.forEach(L=>legendEntries(d,W,H,L,texts).forEach(e=>{
-      if(ents.some(o=>o.tag!==L.tag&&o.text===e.text&&dist(o.cols[0],e.cols[0])<24))return;   // même ligne dans les deux zones
+    Ls.forEach(L=>legendEntries(d,W,H,L,texts||[]).forEach(e=>{
+      if(ents.some(o=>o.tag!==L.tag&&o.text===e.text&&e.text&&dist(o.cols[0],e.cols[0])<24))return;   // même ligne dans les deux zones
       ents.push({...e,tag:L.tag})}));
     const EC=[];ents.forEach((e,k)=>e.cols.forEach(rgb=>EC.push({rgb,k})));
     const nearEnt=(R,G,B)=>{let best=-1,bd=2304;for(const c of EC){const dr=c.rgb[0]-R,dg=c.rgb[1]-G,db=c.rgb[2]-B,dd=dr*dr+dg*dg+db*db;if(dd<bd){bd=dd;best=c.k}}return best};
@@ -983,7 +993,8 @@ body.noscroll{overflow:hidden}
       if(c){c.r+=b.r;c.g+=b.g;c.b+=b.b;c.n+=b.n}else cl.push({n:b.n,r:b.r,g:b.g,b:b.b,rgb:m});
     });
     const hex=rgb=>rgb.map(v=>(v>>3).toString(16).padStart(2,'0')).join('');
-    const E=ents.map(e=>({n:0,rgb:e.cols[0],rgbs:e.cols,legendText:e.text.slice(0,80),legendTag:e.tag,legendPos:e.pos}));
+    // libellé illisible (texte vectorisé, image) : « Légende n°… » dans l'ordre de la légende, à renommer
+    const E=ents.map((e,k)=>({n:0,rgb:e.cols[0],rgbs:e.cols,legendText:e.text?e.text.slice(0,80):'Légende n°'+(ents.slice(0,k+1).filter(o=>o.tag===e.tag).length),legendTag:e.tag,legendPos:e.pos}));
     E.forEach((c,k)=>{c.key='L'+hex(c.rgb);if(E.slice(0,k).some(o=>o.key===c.key))c.key+='-'+k});
     const C=cl.map(c=>({n:c.n,rgb:[c.r/c.n,c.g/c.n,c.b/c.n].map(Math.round)}))
       .filter(c=>c.n>=Math.max(total*0.01,150)).slice(0,500);
