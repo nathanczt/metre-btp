@@ -235,8 +235,8 @@ main p{color:var(--muted);margin:6px 0 0}
 .leg2-state{text-transform:none;letter-spacing:0;font-size:12px;font-weight:600}
 .leg2-state.wait{color:var(--gold)}
 .leg2-state.ok{color:#1f7a3d}
-.use-leg.dwg .use-crop,.use-leg.dwg .leg2-pick,.use-leg.dwg .leg2-clear,.use-leg.dwg .leg2-ok,.use-leg.dwg .leg2-state,.use-leg.dwg .leg2-page,.use-leg.dwg .sel-bar .mk{display:none!important}
-.use-leg.dwg .use-sel{border-left:0;padding-left:0;width:100%}
+.use-leg.dwg:not(.has-leg) .use-crop,.use-leg.dwg .leg2-ok,.use-leg.dwg .leg2-state,.use-leg.dwg .leg2-page,.use-leg.dwg .sel-bar .mk{display:none!important}
+.use-leg.dwg:not(.has-leg) .use-sel{border-left:0;padding-left:0;width:100%}
 .use-body{background:var(--white);padding:12px 14px;min-height:90px;display:flex;justify-content:center;align-items:center}
 .use-crop{display:flex;justify-content:center;align-items:center;min-width:0}
 .use-body.split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:start}
@@ -737,7 +737,7 @@ body.noscroll{overflow:hidden}
     /* Légende validée : extrait à gauche, sélection des zones à droite.
        Une ligne par pastille de la légende retrouvée sur le plan, dans l'ordre de la légende ;
        cocher une ligne revient à cocher la ligne correspondante du récapitulatif. */
-    const useBody=box.querySelector('.use-body'),useSel=box.querySelector('.use-sel'),useList=box.querySelector('.use-list'),useInfo=box.querySelector('.use-info'),useMerge=box.querySelector('.use-merge'),useMark=box.querySelector('.use-mark');
+    const useLeg=box.querySelector('.use-leg'),useBody=box.querySelector('.use-body'),useSel=box.querySelector('.use-sel'),useList=box.querySelector('.use-list'),useInfo=box.querySelector('.use-info'),useMerge=box.querySelector('.use-merge'),useMark=box.querySelector('.use-mark');
     useMark.onchange=()=>{r.marquage=useMark.checked;addPlan(r).catch(()=>{});recap(true)};
     // Couleurs de marquage : libellé (couleur ou groupe) contenant marquage / signalisation
     const MARK=/marquage|signali|passage pieton|zebra/;
@@ -792,16 +792,38 @@ body.noscroll{overflow:hidden}
     /* DWG : une ligne par calque actif (non gelé) ayant un dessin ; quantités lues dans le dessin.
        Clé « L:nom du calque » ; cocher une ligne met le calque en avant sur l'aperçu. */
     let dwgQ={k:null,Q:null};
+    /* Sans légende tracée : une ligne par calque actif. Légende tracée sur le plan (« Sélectionner sur le plan ») :
+       une ligne par échantillon de la légende, métré sur les objets du plan identiques (calques gelés exclus). */
+    let dwgLeg={k:null,E:null};
     function buildUseDwg(){
-      useBody.classList.remove('split');useSel.hidden=false;
-      const D=r.dwg,qk=JSON.stringify(r.excl||[]);if(dwgQ.k!==qk)dwgQ={k:qk,Q:dwgQuantities(D,r.excl)};const Q=dwgQ.Q,act=new Set(api.layersNow().filter(g=>g.visible).map(g=>g.name));
+      const D=r.dwg,legMode=!!r.legend2;
+      useLeg.classList.toggle('has-leg',legMode||picking==='legend2');
+      useBody.classList.toggle('split',legMode&&picking!=='legend2');
+      useSel.hidden=picking==='legend2';if(picking==='legend2')return;
       r.labels=r.labels||{};r.selected=r.selected||[];r.measure=r.measure||{};
-      const rows=D.layers.map((L,i)=>({L,i,q:Q.get(i)})).filter(o=>o.q&&act.has(o.L.name)&&(o.q.m2>0||o.q.ml>0)).map(({L,q})=>{
-        const key='L:'+L.name,auto=L.name;
-        const lab=norm(r.labels[key]??auto),def=LIN.test(lab)?'ml':SURF.test(lab)?'m2':q.fill>0?'m2':'ml';
-        return {key,auto,q,def,m2:q.m2,members:[{rgb:cssRgb(L.c),key}]}});
+      let rows;
+      if(legMode){
+        const off=new Set(D.layers.map((L,i)=>((r.ocg||{})[L.name]??L.on)?-1:i).filter(i=>i>=0));
+        const ck=JSON.stringify([r.legend2,r.excl||[],[...off]]);
+        if(dwgLeg.k!==ck){dwgLeg={k:ck,E:dwgLegend(D,r.legend2,off,r.excl)};dwgHL.set(D,new Map(dwgLeg.E.map(e=>[e.key,e.items])));
+          if(r.selected.some(k=>k.startsWith('D:')))setTimeout(()=>api.redraw())}
+        const m=D.m;
+        rows=dwgLeg.E.map((e,i)=>{const auto=e.label||'Légende n°'+(i+1),lab=norm(r.labels[e.key]??auto);
+          const m2=(e.kind==='f'?e.q.fill:e.q.closed)*m*m,ml=(e.kind==='f'?e.q.per:e.q.len)*m;
+          const def=LIN.test(lab)?'ml':SURF.test(lab)?'m2':e.kind==='f'||(e.closed&&!e.thin)?'m2':'ml';
+          return {key:e.key,auto,q:{m2,ml,n:e.items.size,byLayer:e.byLayer},def,m2,members:[{rgb:cssRgb(e.c),key:e.key}]}});
+      }else{
+        const qk=JSON.stringify(r.excl||[]);if(dwgQ.k!==qk)dwgQ={k:qk,Q:dwgQuantities(D,r.excl)};const Q=dwgQ.Q,act=new Set(api.layersNow().filter(g=>g.visible).map(g=>g.name));
+        rows=D.layers.map((L,i)=>({L,i,q:Q.get(i)})).filter(o=>o.q&&act.has(o.L.name)&&(o.q.m2>0||o.q.ml>0)).map(({L,q})=>{
+          const key='L:'+L.name,auto=L.name;
+          const lab=norm(r.labels[key]??auto),def=LIN.test(lab)?'ml':SURF.test(lab)?'m2':q.fill>0?'m2':'ml';
+          return {key,auto,q,def,m2:q.m2,members:[{rgb:cssRgb(L.c),key}]}});
+      }
       useList.innerHTML='';
-      if(!rows.length){useInfo.textContent='';useList.innerHTML='<li class="msg">Aucun calque actif avec un dessin. Dégelez des calques dans la liste « Calques ».</li>';useMerge.hidden=true;buildStruct([]);return}
+      if(!rows.length){useInfo.textContent='';
+        useList.innerHTML=legMode?'<li class="msg">Aucun échantillon trouvé dans la zone tracée. Vérifiez que le rectangle englobe bien la légende (bouton « Changer la zone »), et que ses calques ne sont pas gelés.</li>'
+          :'<li class="msg">Aucun calque actif avec un dessin. Dégelez des calques dans la liste « Calques », ou cliquez sur « Sélectionner sur le plan » pour tracer la légende du plan.</li>';
+        useMerge.hidden=true;buildStruct([]);return}
       rows.forEach(it=>{
         const on=r.selected.includes(it.key),li=document.createElement('li');li.className=on?'on':'';it.li=li;
         const k=r.measure[it.key]||it.def;
@@ -813,7 +835,8 @@ body.noscroll{overflow:hidden}
         const nm=li.querySelector('.nm');nm.value=r.labels[it.key]??it.auto;
         nm.onchange=()=>{const v=nm.value.trim();if(v&&v!==it.auto)r.labels[it.key]=v;else{delete r.labels[it.key];nm.value=it.auto}addPlan(r).catch(()=>{});buildUse()};
         const qty=li.querySelector('.qty'),v=k==='m2'?it.q.m2:it.q.ml;
-        qty.textContent=v>0?'≈ '+fmt(v,v<1?3:v<10?2:1)+(k==='m2'?' m²':' ml'):k==='m2'?'pas de surface':'pas de trait';
+        qty.textContent=it.q.n===0?'absent du plan':v>0?'≈ '+fmt(v,v<1?3:v<10?2:1)+(k==='m2'?' m²':' ml'):k==='m2'?'pas de surface':'pas de trait';
+        if(it.q.n!=null)qty.title=it.q.n+' objet'+(it.q.n>1?'s':'')+' du plan'+(it.q.n&&!it.q.byLayer?' (même aspect, sur un autre calque que la légende)':'');
         li.querySelectorAll('.seg button').forEach(b=>{b.classList.toggle('on',b.dataset.k===k);
           b.onclick=()=>{if(b.dataset.k===it.def)delete r.measure[it.key];else r.measure[it.key]=b.dataset.k;addPlan(r).catch(()=>{});buildUse()}});
         const cbx=li.querySelector('.pick');
@@ -827,7 +850,7 @@ body.noscroll{overflow:hidden}
         useList.appendChild(li);
       });
       const n=rows.filter(it=>r.selected.includes(it.key)).length;
-      useInfo.textContent=rows.length+(rows.length>1?' calques actifs':' calque actif')+(n?' · '+n+' sélectionné'+(n>1?'s':''):'');
+      useInfo.textContent=rows.length+(legMode?(rows.length>1?' lignes de légende':' ligne de légende'):(rows.length>1?' calques actifs':' calque actif'))+(n?' · '+n+' sélectionné'+(n>1?'s':''):'');
       useMerge.hidden=true;buildStruct(rows);
     }
     function buildUse(){
@@ -1580,7 +1603,7 @@ body.noscroll{overflow:hidden}
     try{return dwgToDrawing(L.convert(d))}finally{try{L.dwg_free(d)}catch(e){}}
   }
   /* Dessine le plan DWG dans un canvas : fenêtre win (fractions de la page) à maxPx pixels au plus */
-  function drawDwg(D,off,win,maxPx,hl){   // hl : Map calque → contraste (0,2…3) des calques mis en avant ; les autres sont estompés
+  function drawDwg(D,off,win,maxPx,hl){   // hl : objet → contraste (0,2…3) s'il est mis en avant, 0 sinon (estompé) ; null : rien d'estompé
     const [x0,y0,x1,y1]=D.box,pad=Math.max(x1-x0,y1-y0)*.02||1;
     const X0=x0-pad,Y1=y1+pad,PW=x1-x0+2*pad,PH=y1-y0+2*pad;   // page = emprise + 2 % de marge
     const w=win||{x:0,y:0,w:1,h:1};
@@ -1602,8 +1625,8 @@ body.noscroll{overflow:hidden}
     // remplissages d'abord, puis traits, puis textes
     for(const pass of ['f','s','t'])for(const it of D.items){
       if(it.k!==pass||off.has(it.l))continue;
-      let hf=1;g.globalAlpha=1;if(hl&&hl.size){if(hl.has(it.l)){hf=hl.get(it.l);g.globalAlpha=Math.min(1,hf)}else g.globalAlpha=.15}
-      const tw=Math.max(1,hf);   // contraste > 0 : traits plus épais
+      let hf=1;g.globalAlpha=1;if(hl){hf=hl(it);g.globalAlpha=hf?Math.min(1,hf):.15}
+      const tw=Math.max(1,hf||1);   // contraste > 0 : traits plus épais
       if(pass==='f'){
         g.beginPath();it.p.forEach(p=>path(p,true));
         if(!it.pat){g.fillStyle=it.c;g.fill('evenodd');continue}
@@ -1652,6 +1675,68 @@ body.noscroll{overflow:hidden}
   }
   const cssRgb=c=>{const g=document.createElement('canvas').getContext('2d');g.fillStyle='#000';g.fillStyle=c;const h=g.fillStyle,m=/^#(..)(..)(..)$/.exec(h);
     return m?[1,2,3].map(i=>parseInt(m[i],16)):(h.match(/\d+/g)||[0,0,0]).slice(0,3).map(Number)};
+  /* ---- Légende d'un DWG tracée sur le plan : chaque échantillon (hachure, remplissage ou trait) et son
+     libellé forment une ligne ; on métré ensuite les objets du plan identiques à l'échantillon
+     (même type, même couleur, même motif de hachure ; même calque si possible). ---- */
+  const dwgHL=new WeakMap();   // dessin → Map(clé de ligne → objets du plan correspondants), pour la mise en avant
+  const dRing=p=>{let a=0;const n=p.length;for(let i=0;i<n;i+=2){const j=(i+2)%n;a+=p[i]*p[j+1]-p[j]*p[i+1]}return Math.abs(a)/2};
+  const dLen=(p,z)=>{let l=0;for(let i=2;i<p.length;i+=2)l+=Math.hypot(p[i]-p[i-2],p[i+1]-p[i-1]);if(z&&p.length>=4)l+=Math.hypot(p[0]-p[p.length-2],p[1]-p[p.length-1]);return l};
+  function dBox(it){
+    if(it.k==='t'){const L=it.s.split('\n'),n=L.length,w=it.h*Math.max(...L.map(l=>l.length))*.62,H=it.h*(1+(n-1)*1.6);
+      const x0=it.ha==='center'?it.x-w/2:it.ha==='right'?it.x-w:it.x;
+      const y1=it.va==='top'?it.y:it.va==='middle'?it.y+H/2:it.va==='bottom'?it.y+H:it.y+it.h;return [x0,y1-H,x0+w,y1]}
+    let a=Infinity,b=Infinity,c=-Infinity,d=-Infinity;
+    for(const p of it.p)for(let i=0;i<p.length;i+=2){if(p[i]<a)a=p[i];if(p[i]>c)c=p[i];if(p[i+1]<b)b=p[i+1];if(p[i+1]>d)d=p[i+1]}
+    return [a,b,c,d];
+  }
+  const dPageBox=D=>{const [x0,y0,x1,y1]=D.box,pad=Math.max(x1-x0,y1-y0)*.02||1;return {X0:x0-pad,Y1:y1+pad,PW:x1-x0+2*pad,PH:y1-y0+2*pad}};
+  const dRect=(D,e)=>{const P=dPageBox(D);return [P.X0+e.x*P.PW,P.Y1-(e.y+e.h)*P.PH,P.X0+(e.x+e.w)*P.PW,P.Y1-e.y*P.PH]};
+  const dPat=it=>it.pat?it.pat.map(d=>Math.round(((d.a*180/Math.PI)%180+180)%180)+'/'+d.d.length).sort().join(','):'plein';
+  const dSig=(it,withLayer)=>it.k+'|'+String(it.c).toLowerCase()+'|'+(it.k==='f'?dPat(it):it.z?'ferme':'ouvert')+(withLayer?'|'+it.l:'');
+  // Quantités d'objets (unités du dessin) : surfaces des remplissages ou contours fermés, longueurs des traits
+  function dQty(items){let fill=0,closed=0,len=0,per=0;
+    for(const it of items){
+      if(it.k==='f'){const A=it.p.map(dRing).sort((u,v)=>v-u);fill+=A.length>1?Math.max(0,A[0]-A.slice(1).reduce((u,v)=>u+v,0)):A[0];it.p.forEach(p=>per+=dLen(p,true))}
+      else for(const p of it.p){len+=dLen(p,it.z);if(it.z)closed+=dRing(p)}}
+    return {fill,closed,len,per}}
+  function dwgLegend(D,leg,off,excl){
+    const R=dRect(D,leg),RW=R[2]-R[0],RH=R[3]-R[1],tol=Math.max(RW,RH)*.006;
+    const inR=b=>b[0]>=R[0]-tol&&b[2]<=R[2]+tol&&b[1]>=R[1]-tol&&b[3]<=R[3]+tol;
+    const shapes=[],texts=[];
+    for(const it of D.items){if(off.has(it.l))continue;const b=dBox(it);if(!isFinite(b[0])||!inR(b))continue;
+      if(it.k==='t'){if(it.s.trim()&&Math.abs(Math.sin(it.r||0))<.2)texts.push({it,b})}
+      else if(b[2]-b[0]<RW*.6&&b[3]-b[1]<RH*.5)shapes.push({it,b})}   // cadre et séparateurs écartés
+    // échantillons : objets qui se touchent
+    const par=shapes.map((_,i)=>i),f=i=>par[i]===i?i:(par[i]=f(par[i]));
+    for(let i=0;i<shapes.length;i++)for(let j=i+1;j<shapes.length;j++){const a=shapes[i].b,b=shapes[j].b;
+      if(a[0]<=b[2]+tol&&b[0]<=a[2]+tol&&a[1]<=b[3]+tol&&b[1]<=a[3]+tol)par[f(i)]=f(j)}
+    const G=new Map();shapes.forEach((s,i)=>{const k=f(i);if(!G.has(k))G.set(k,[]);G.get(k).push(s)});
+    let cl=[...G.values()].map(g=>({items:g.map(s=>s.it),b:[Math.min(...g.map(s=>s.b[0])),Math.min(...g.map(s=>s.b[1])),Math.max(...g.map(s=>s.b[2])),Math.max(...g.map(s=>s.b[3]))],texts:[]}));
+    // libellés : texte à droite de l'échantillon, sur la même ligne (ou juste en dessous, libellé sur plusieurs lignes)
+    for(const t of texts){const th=t.b[3]-t.b[1],tc=(t.b[1]+t.b[3])/2;let best=null,bs=Infinity;
+      for(const c of cl){if(c.b[2]>t.b[0]+tol)continue;const ch=c.b[3]-c.b[1],cc=(c.b[1]+c.b[3])/2;
+        const dy=tc>c.b[3]||tc<c.b[1]?Math.min(Math.abs(tc-c.b[3]),Math.abs(tc-c.b[1])):0;
+        if(dy>Math.max(ch,th)*1.2)continue;const sc=dy*4+Math.abs(tc-cc)+(t.b[0]-c.b[2])*.05;if(sc<bs){bs=sc;best=c}}
+      if(best)best.texts.push(t)}
+    cl=cl.filter(c=>c.texts.length||c.items.some(it=>it.k==='f')||c.b[2]-c.b[0]>RW*.03);
+    cl.sort((a,b)=>b.b[3]-a.b[3]||a.b[0]-b.b[0]);
+    // objets du plan : hors légende, hors zones exclues, calques non gelés
+    const ex=(excl||[]).map(e=>dRect(D,e)),plan=[];
+    for(const it of D.items){if(it.k==='t'||off.has(it.l))continue;const b=dBox(it),cx=(b[0]+b[2])/2,cy=(b[1]+b[3])/2;
+      if(cx>=R[0]&&cx<=R[2]&&cy>=R[1]&&cy<=R[3])continue;if(ex.some(e=>cx>=e[0]&&cx<=e[2]&&cy>=e[1]&&cy<=e[3]))continue;plan.push(it)}
+    const seen=new Set(),out=[];
+    for(const c of cl){
+      const prim=c.items.some(it=>it.k==='f')?c.items.filter(it=>it.k==='f'):c.items;
+      const sigL=new Set(prim.map(it=>dSig(it,true))),sig=new Set(prim.map(it=>dSig(it,false)));
+      const key=[...sigL].sort().join('§');if(seen.has(key))continue;seen.add(key);
+      let m=plan.filter(it=>sigL.has(dSig(it,true))),byLayer=true;
+      if(!m.length){m=plan.filter(it=>sig.has(dSig(it,false)));byLayer=false}
+      const label=c.texts.sort((a,b)=>b.b[3]-a.b[3]||a.b[0]-b.b[0]).map(t=>t.it.s.trim()).join(' ').replace(/\s+/g,' ');
+      const w=c.b[2]-c.b[0],h=c.b[3]-c.b[1];
+      out.push({key:'D:'+key,label,kind:prim[0].k,closed:prim.every(it=>it.z),thin:Math.min(w,h)<Math.max(w,h)*.15,c:prim[0].c,items:new Set(m),byLayer,q:dQty(m)});
+    }
+    return out;
+  }
   /* Quantités d'un DWG par calque, en vraie grandeur (D.m mètres par unité) :
      surface = hachures et remplissages (sinon contours fermés), longueur = traits.
      Les objets dont le centre tombe dans une zone exclue ne sont pas comptés. */
@@ -1680,8 +1765,13 @@ body.noscroll{overflow:hidden}
       return rot?rotated(s.canvas,s.canvas.width,s.canvas.height,rot):s.canvas});
     const hidden=()=>{const o=r.ocg||{};return new Set(D.layers.map((L,i)=>(o[L.name]??L.on)?-1:i).filter(i=>i>=0))};
     // calques cochés dans la légende automatique, avec leur contraste (curseur -100…+100 → 0,2…3)
-    const hl=()=>{const S=new Set((r.selected||[]).filter(k=>k.startsWith('L:')).map(k=>k.slice(2))),M=new Map();
-      D.layers.forEach((L,i)=>{if(!S.has(L.name))return;const v=(r.contrast||{})['L:'+L.name]||0;M.set(i,v>=0?1+v/50:1+v/125)});return M};
+    // lignes cochées de la légende automatique (calques « L: », ou éléments d'une ligne de légende « D: »)
+    const hl=()=>{const ctr=r.contrast||{},fac=k=>{const v=ctr[k]||0;return v>=0?1+v/50:1+v/125};
+      const mm=r.legend2?dwgHL.get(D):null,LM=new Map(),IM=new Map();
+      (r.selected||[]).forEach(k=>{
+        if(mm){if(k.startsWith('D:')&&mm.has(k))mm.get(k).forEach(it=>IM.set(it,fac(k)))}
+        else if(k.startsWith('L:')){const i=D.layers.findIndex(L=>L.name===k.slice(2));if(i>=0)LM.set(i,fac(k))}});
+      if(!LM.size&&!IM.size)return null;return it=>IM.get(it)??LM.get(it.l)??0};
     const draw=()=>{const s=drawDwg(D,hidden(),null,3000,hl());pres.setRaw(r.rot?rotated(s.canvas,s.canvas.width,s.canvas.height,r.rot):s.canvas)};
     const list=()=>D.layers.map((L,i)=>({id:L.name,name:L.name,visible:(r.ocg||{})[L.name]??L.on,c:L.c})).filter((g,i)=>D.items.some(it=>it.l===i));
     setTimeout(()=>{try{draw()}catch(e){view.innerHTML='<span class="msg">Impossible d\'afficher ce DWG.</span>'}});
