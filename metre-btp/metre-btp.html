@@ -120,6 +120,13 @@ main p{color:var(--muted);margin:6px 0 0}
 .leg-view .recap,.leg-view .leg-crop{display:none}   /* récapitulatif masqué : la sélection se fait dans « Légende automatique » */
 .pane-h{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--side-line);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);min-height:41px}
 .pane-h b{font-weight:700;color:var(--ink)}
+/* Flèche pour replier / déplier une partie (Calques, Légende manuelle, Légende automatique, Structure) */
+.sfold{flex:none;width:20px;height:20px;margin:0 -2px 0 -6px;display:grid;place-items:center;border:0;background:none;border-radius:4px;color:var(--muted);cursor:pointer;padding:0}
+.sfold:hover{background:var(--w2);color:var(--ink)}
+.sfold svg{width:14px;height:14px;transition:transform .15s}
+.fold-off .sfold svg{transform:rotate(-90deg)}
+.fold-off>:not(.pane-h):not(.ocg-h){display:none!important}
+.fold-off>.pane-h,.fold-off>.ocg-h{border-bottom:0}
 .pane-h .leg-page{flex:1;text-transform:none;letter-spacing:0;font-size:12px}
 .pane-h .sm{text-transform:none;letter-spacing:0;color:var(--ink)}
 .pane-h .sm:hover{border-color:var(--accent);color:var(--accent)}
@@ -343,6 +350,7 @@ body.noscroll{overflow:hidden}
   const TRASH='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>';
   const ROT_R='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>';
   const ROT_L='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.34-5.66"/><path d="M4 4v5h5"/></svg>';
+  const CHEV='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
   const FULL='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
   const EXIT='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>';
   let confirmId=null;
@@ -512,6 +520,7 @@ body.noscroll{overflow:hidden}
           <div class="pane-h"><b>Structure</b><span class="grow"></span><span class="struct-info"></span></div>
           <ul class="struct-list"></ul>
         </div>`;
+      ['.pane.legend','.use-leg','.struct'].forEach(q=>addFold(box.querySelector(q),q.replace(/\W/g,'')));
       box.querySelector('.del').onclick=async()=>{await delPlan(r.id).catch(()=>{});renderPlans()};
       plansEl.appendChild(box);
       const view=box.querySelector('.view');
@@ -524,6 +533,17 @@ body.noscroll{overflow:hidden}
       const fs=setupFullscreen(box.querySelector('.pane'),box.querySelector('.full-btn'),api);
       if(dwg)setupLayers(r,box,api,legend,fs);   // liste des calques : DWG seulement
     });
+  }
+
+  /* Flèche devant le titre d'une partie : replie / déplie la partie (choix gardé dans ce navigateur) */
+  function addFold(sec,key){
+    const h=sec&&sec.querySelector(':scope>.pane-h,:scope>.ocg-h');if(!h)return;
+    const b=document.createElement('button');b.className='sfold';b.innerHTML=CHEV;
+    const k='mbtp-fold-'+key;let f=false;try{f=localStorage.getItem(k)==='1'}catch(e){}
+    const set=v=>{sec.classList.toggle('fold-off',v);b.title=v?'Déplier cette partie':'Replier cette partie';b.setAttribute('aria-expanded',String(!v));
+      try{v?localStorage.setItem(k,'1'):localStorage.removeItem(k)}catch(e){}};
+    b.onclick=e=>{e.stopPropagation();set(!sec.classList.contains('fold-off'))};
+    h.insertBefore(b,h.firstChild);set(f);
   }
 
   /* ---- Calques du PDF (contenu optionnel) ou du DWG : liste affichée sous l'aperçu (sur le côté
@@ -540,6 +560,7 @@ body.noscroll{overflow:hidden}
         <button class="sm ocg-off" title="Geler les calques affichés dans la liste">Tout geler</button></div>
       <div class="ocg-l"></div>`;
     const head=bar.querySelector('.ocg-h b'),q=bar.querySelector('input'),ul=bar.querySelector('.ocg-l');
+    addFold(bar,'calques');
     const apply=()=>{addPlan(r).catch(()=>{});api.redraw();legend.render();fill()};
     const shown=()=>{const t=q.value.trim().toLowerCase();return api.layersNow().filter(g=>!t||g.name.toLowerCase().includes(t))};
     const setAll=(L,v)=>{L.forEach(g=>api.setLayer(g.id,v));apply()};
