@@ -94,7 +94,7 @@ main p{color:var(--muted);margin:6px 0 0}
 .box-body{display:grid;grid-template-columns:minmax(0,1fr)}   /* aperçu sur toute la largeur, légende dessous */
 .pane{display:flex;flex-direction:column;min-width:0}
 .pane.legend{border-top:1px solid var(--side-line)}
-.leg-view .recap{display:none}   /* récapitulatif masqué : la sélection se fait dans « Légende automatique » */
+.leg-view .recap,.leg-view .leg-crop{display:none}   /* récapitulatif masqué : la sélection se fait dans « Légende automatique » */
 .pane-h{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--side-line);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);min-height:41px}
 .pane-h b{font-weight:700;color:var(--ink)}
 .pane-h .leg-page{flex:1;text-transform:none;letter-spacing:0;font-size:12px}
@@ -135,6 +135,13 @@ main p{color:var(--muted);margin:6px 0 0}
 .excl-bar[hidden]{display:none}
 .excl-bar .chip{color:var(--danger);border-color:#e7b9b5;background:var(--danger-bg)}
 .excl-bar .chip:hover{border-color:var(--danger)}
+.man-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.man-list li{display:grid;grid-template-columns:18px minmax(0,1fr) auto 28px;column-gap:10px;align-items:center;padding:5px 0;border-bottom:1px solid var(--w2)}
+.man-list li.msg{display:block;border:0;color:var(--muted);font-size:13px}
+.man-list .lab{min-width:0;border:1px solid transparent;background:transparent;border-radius:4px;padding:3px 6px;font-size:13.5px;font-weight:600}
+.man-list .lab:hover{border-color:var(--side-line)}
+.man-list .lab:focus{border-color:var(--accent);background:var(--white);outline:none}
+.man-list .uq{font-size:12.5px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
 .ctr-l{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:12px}
 .recap-list .tools{display:flex;align-items:center;gap:6px}
 .recap-list .tools .sm{padding:2px 8px;font-size:11.5px}
@@ -482,8 +489,49 @@ body.noscroll{overflow:hidden}
       <div class="sel-bar"><span class="sel-info"></span><button class="sm sel-merge primary-sm" hidden title="Regrouper les lignes cochées en une seule">Fusionner</button><button class="sm sel-all" hidden>Tout sélectionner</button><button class="sm sel-none" hidden>Tout désélectionner</button></div>
       <div class="scale-bar"><b>Échelle</b> 1 / <input class="scale-in" type="number" min="1" step="1" placeholder="?" aria-label="Échelle du plan"><span class="scale-info"></span></div>
       <ul class="recap-list"><li class="msg">Analyse du plan…</li></ul></section>
+      <section class="man-zones"><div class="sub-h"><b>Zones sélectionnées sur le plan</b><span class="man-info"></span></div><ul class="man-list"><li class="msg">Analyse du plan…</li></ul></section>
       <section class="leg-crop"><div class="sub-h"><b>Extrait de la légende</b></div><div class="crop-body"></div></section>`;
     const cb=lv.querySelector('.crop-body'),rl=lv.querySelector('.recap-list'),rp=lv.querySelector('.recap-page');
+    /* Zones du plan choisies à la main : « Sélectionner sur le plan », puis un clic sur une zone colorée
+       ajoute sa ligne. Couleurs du plan telles quelles, sans lien avec la légende automatique
+       (zones de légende et zones exclues non comptées). r.manZones = clés, r.manLabels = noms. */
+    const manList=lv.querySelector('.man-list'),manInfo=lv.querySelector('.man-info');
+    let manRes=null;
+    function buildMan(zs){
+      if(zs)manRes=zs;zs=manRes||[];
+      const keys=r.manZones||[],mpp=mPerPx();r.manLabels=r.manLabels||{};
+      manList.innerHTML='';manInfo.textContent=picking==='man'?'cliquez sur les zones du plan':keys.length?keys.length+(keys.length>1?' zones':' zone'):'';
+      if(!keys.length){manList.innerHTML='<li class="msg">Aucune zone. Cliquez sur « Sélectionner sur le plan », puis sur les zones colorées du plan : chaque clic ajoute la ligne de la zone.</li>';return}
+      keys.forEach(k=>{
+        const c=zs.find(c=>c.key===k),li=document.createElement('li');
+        li.innerHTML=`<span class="sw"${c?` style="background:rgb(${c.rgb.join(',')})"`:''}></span><input class="lab" aria-label="Nom de la zone"><span class="uq"></span>
+          <button class="ico del" title="Retirer cette zone" aria-label="Retirer cette zone">${TRASH}</button>`;
+        const inp=li.querySelector('.lab'),auto=c?colorName(c.rgb):'Zone';inp.value=r.manLabels[k]??auto;
+        inp.onchange=()=>{const v=inp.value.trim();if(v&&v!==auto)r.manLabels[k]=v;else{delete r.manLabels[k];inp.value=auto}addPlan(r).catch(()=>{})};
+        const uq=li.querySelector('.uq');
+        if(!c)uq.textContent='absente de cette page';
+        else if(mpp){const v=c.area*mpp*mpp;uq.textContent='≈ '+fmt(v,v<10?2:1)+' m²'}
+        else uq.textContent=fmt(c.pct,1)+' %';
+        li.querySelector('.del').onclick=()=>{r.manZones=r.manZones.filter(x=>x!==k);delete r.manLabels[k];addPlan(r).catch(()=>{});buildMan();setBtns()};
+        manList.appendChild(li);
+      });
+    }
+    // Clic sur l'aperçu en mode sélection : zone colorée sous le pointeur (ou à quelques pixels)
+    function pickZoneAt(e){
+      const media=view.querySelector('canvas');if(!media||!manRes||!manRes.px)return;
+      const br=media.getBoundingClientRect(),nw=media.width,nh=media.height,fk=Math.min(br.width/nw,br.height/nh);
+      const fx=(e.clientX-br.left-(br.width-nw*fk)/2)/(nw*fk),fy=(e.clientY-br.top-(br.height-nh*fk)/2)/(nh*fk);
+      if(fx<0||fx>1||fy<0||fy>1)return;
+      const [u,v]=toUnrot(fx,fy,r.rot||0),{lab,W,H}=manRes.px;
+      const px=Math.min(W-1,u*W|0),py=Math.min(H-1,v*H|0);let j=-1;
+      for(let rad=0;rad<=6&&j<0;rad++)for(let dy=-rad;dy<=rad&&j<0;dy++)for(let dx=-rad;dx<=rad;dx++){
+        const x=px+dx,y=py+dy;if(x<0||y<0||x>=W||y>=H)continue;const l=lab[y*W+x];if(l>=0){j=l;break}}
+      const c=manRes.find(c=>c.j===j);
+      if(!c){manInfo.textContent='pas de zone colorée à cet endroit';return}
+      r.manZones=r.manZones||[];
+      if(!r.manZones.includes(c.key)){r.manZones.push(c.key);addPlan(r).catch(()=>{})}
+      buildMan();
+    }
     // Deux zones tracées sur le plan : la zone de légende (en-tête du panneau Légende)
     // et la « légende à utiliser » (encadré sous le plan), prioritaire pour nommer les lignes.
     const zones={
@@ -525,6 +573,9 @@ body.noscroll{overflow:hidden}
     const setBtns=()=>{renderExcl();for(const k in zones){const z=zones[k];
       z.btn.textContent=picking===k?'Annuler':r[k]?'Changer la zone':'Sélectionner sur le plan';
       z.btn.disabled=!!picking&&picking!==k;z.clr.hidden=!!picking||!r[k]}
+      // Légende manuelle : le bouton sert à choisir les zones du plan par clic
+      pick.textContent=picking==='man'?'Terminer la sélection':'Sélectionner sur le plan';
+      pick.disabled=!!picking&&picking!=='man';clear.hidden=!!picking||!(r.manZones||[]).length;
       // Légende à utiliser : prise en compte seulement une fois validée
       const L2=r.legend2,show=!picking&&!!L2;
       ok2.hidden=!show||!!L2.ok;
@@ -648,13 +699,14 @@ body.noscroll{overflow:hidden}
       if(!force&&key===lastKey)return;lastKey=key;
       const my=++rtok;
       rp.textContent=api.pages()>1?'page '+n:'';
-      rl.innerHTML='<li class="msg">Analyse du plan…</li>';
+      rl.innerHTML='<li class="msg">Analyse du plan…</li>';manList.innerHTML='<li class="msg">Analyse du plan…</li>';manInfo.textContent='';
       try{
         const src=await api.source(n);if(my!==rtok)return;
         const res=analyzeColors(src.canvas,[r.legend2&&r.legend2.ok&&{...r.legend2,tag:'use'},r.legend].filter(Boolean),src.texts,(r.excl||[]).filter(e=>(e.page||1)===n));
         if(my!==rtok)return;
         found=res;ptPx=src.ptPerPx||null;detected=detectScale(src.texts);showScale();
         if(r.marquage)fillMarking(res,isMark,mPerPx());
+        buildMan(analyzeColors(src.canvas,[r.legend2,r.legend].filter(Boolean),[],(r.excl||[]).filter(e=>(e.page||1)===n)));
         if(!res.length){rl.innerHTML='<li class="msg">Aucune surface colorée détectée sur cette page.</li>';items=[];applySel(true);return}
         buildList();
       }catch(e){if(my===rtok)rl.innerHTML='<li class="msg">Analyse impossible pour ce plan.</li>'}
@@ -791,14 +843,15 @@ body.noscroll{overflow:hidden}
       r.selected=r.selected.filter(k=>!sel.some(it=>it.key===k));r.selected.push(gk);
       addPlan(r).catch(()=>{});buildList();
     };
-    function stop(){picking=null;view.classList.remove('picking');view.querySelector('.sel')?.remove();render()}
-    const startPick=k=>{if(picking===k){stop();return}if(picking)return;picking=k;view.classList.add('picking');render();
-      if(k==='legend2')view.scrollIntoView({block:'nearest',behavior:'smooth'})};
-    pick.onclick=()=>startPick('legend');pick2.onclick=()=>startPick('legend2');exBtn.onclick=()=>startPick('excl');
-    clear.onclick=()=>{delete r.legend;addPlan(r).catch(()=>{});render();recap()};
+    function stop(){picking=null;view.classList.remove('picking');view.querySelector('.sel')?.remove();render();buildMan()}
+    const startPick=k=>{if(picking===k){stop();return}if(picking)return;picking=k;view.classList.add('picking');render();buildMan();
+      if(k==='legend2'||k==='man')view.scrollIntoView({block:'nearest',behavior:'smooth'})};
+    pick.onclick=()=>startPick('man');pick2.onclick=()=>startPick('legend2');exBtn.onclick=()=>startPick('excl');
+    clear.onclick=()=>{delete r.manZones;addPlan(r).catch(()=>{});buildMan();setBtns()};
     clear2.onclick=()=>{delete r.legend2;addPlan(r).catch(()=>{});render();recap()};
     view.addEventListener('pointerdown',e=>{
-      if(!picking)return;const media=view.querySelector('canvas,img');if(!media)return;
+      if(!picking)return;
+      if(picking==='man'){e.preventDefault();pickZoneAt(e);return}const media=view.querySelector('canvas,img');if(!media)return;
       e.preventDefault();view.setPointerCapture(e.pointerId);
       // zone réellement occupée par le plan dans l'élément (object-fit:contain)
       const br=media.getBoundingClientRect(),vr=view.getBoundingClientRect();
