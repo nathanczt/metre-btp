@@ -224,6 +224,14 @@ main p{color:var(--muted);margin:6px 0 0}
 .prop .why{color:var(--muted);font-size:11.5px}
 .use-leg{border-top:1px solid var(--side-line)}
 .use-leg .leg2-page{text-transform:none;letter-spacing:0;font-size:12px}
+.sc2{display:inline-flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:12.5px;color:var(--ink);margin-left:6px}
+.sc2[hidden],.sc2 [hidden]{display:none}
+.sc2 label{display:inline-flex;align-items:center;gap:4px}
+.sc2 input{width:78px;border:1px solid var(--side-line);border-radius:4px;padding:3px 6px;font:inherit;background:var(--white)}
+.sc2 select{border:1px solid var(--side-line);border-radius:4px;padding:2px 4px;font:inherit;background:var(--white)}
+.sc2 .sc2-info{color:var(--muted);font-size:12px}
+.sc2.miss input{border-color:var(--gold);box-shadow:0 0 0 2px rgba(201,138,0,.18)}
+.sc2.miss .sc2-info{color:var(--gold);font-weight:600}
 .leg2-state{text-transform:none;letter-spacing:0;font-size:12px;font-weight:600}
 .leg2-state.wait{color:var(--gold)}
 .leg2-state.ok{color:#1f7a3d}
@@ -509,7 +517,10 @@ body.noscroll{overflow:hidden}
           </div>
         </div>
         <div class="use-leg">
-          <div class="pane-h"><b>Légende automatique</b><span class="leg2-page"></span><span class="grow"></span>
+          <div class="pane-h"><b>Légende automatique</b><span class="leg2-page"></span>
+            <span class="sc2" hidden><label class="sc2-l" title="Échelle du plan, utilisée pour calculer les surfaces et les longueurs">Échelle 1 / <input class="sc2-in" type="number" min="1" step="1" placeholder="?" aria-label="Échelle du plan"></label>
+              <label class="sc2-ul" title="Unité dans laquelle le DWG est dessiné (une unité du dessin = 1 mm, 1 cm ou 1 m)">Unités du dessin <select class="sc2-u" aria-label="Unités du dessin"><option value="0.001">mm</option><option value="0.01">cm</option><option value="1">m</option></select></label>
+              <span class="sc2-info"></span></span><span class="grow"></span>
             <span class="leg2-state"></span>
             <button class="sm leg2-ok primary-sm" hidden title="Utiliser cette légende pour nommer le récapitulatif">Valider</button>
             <button class="sm leg2-pick"></button><button class="sm leg2-clear" hidden>Effacer</button></div>
@@ -898,7 +909,22 @@ body.noscroll{overflow:hidden}
     const scaleIn=lv.querySelector('.scale-in'),scaleInfo=lv.querySelector('.scale-info');
     const scaleN=()=>r.scale||detected||null;
     const mPerPx=()=>{if(mpx)return mpx;const N=scaleN();return ptPx&&N?ptPx*25.4/72/1000*N:null};
+    /* Échelle visible dans l'en-tête « Légende automatique » : saisie à la main si elle n'est pas lue
+       sur le plan (PDF) ; pour un DWG, unités du dessin (mm, cm, m) à corriger si elles sont supposées. */
+    const sc2=box.querySelector('.sc2'),sc2In=box.querySelector('.sc2-in'),sc2U=box.querySelector('.sc2-u'),sc2Info=box.querySelector('.sc2-info');
+    function showScale2(){
+      if(r.dwg){sc2.hidden=false;sc2In.parentNode.hidden=true;sc2U.parentNode.hidden=false;sc2U.value=String(r.dwg.m);
+        sc2.classList.toggle('miss',!!r.dwg.mGuess);sc2Info.textContent=r.dwg.mGuess?'supposées : vérifiez':'';return}
+      sc2U.parentNode.hidden=true;sc2In.parentNode.hidden=false;
+      if(!ptPx){sc2.hidden=true;return}
+      sc2.hidden=false;if(document.activeElement!==sc2In)sc2In.value=scaleN()||'';
+      sc2.classList.toggle('miss',!scaleN());
+      sc2Info.textContent=r.scale?(detected&&detected!==r.scale?'saisie (lue sur le plan : 1/'+detected+')':'saisie'):detected?'lue sur le plan':'non trouvée : saisissez-la';
+    }
+    sc2In.onchange=()=>{scaleIn.value=sc2In.value;scaleIn.onchange()};
+    sc2U.onchange=()=>{r.dwg.m=Number(sc2U.value);r.dwg.mGuess=false;dwgQ={k:null,Q:null};addPlan(r).catch(()=>{});showScale2();recap(true)};
     function showScale(){
+      showScale2();
       scaleIn.value=scaleN()||'';scaleIn.disabled=!!mpx;
       if(mpx){scaleIn.value='';scaleInfo.textContent='dessin DWG en vraie grandeur'+(r.dwg?.mGuess?' (unités supposées : '+({.001:'mm',.01:'cm',1:'m'}[r.dwg.m]||'?')+')':'');return}
       scaleInfo.textContent=!ptPx?'— quantités disponibles pour les PDF et les DWG uniquement'
@@ -907,7 +933,7 @@ body.noscroll{overflow:hidden}
     }
     scaleIn.onchange=()=>{const v=Math.round(Number(scaleIn.value));
       if(v>0&&v!==detected)r.scale=v;else delete r.scale;
-      addPlan(r).catch(()=>{});showScale();items.forEach(fillProp)};
+      addPlan(r).catch(()=>{});showScale();items.forEach(fillProp);buildMan();buildUse()};
     const LIN=/bordure|caniveau|cloture|fil d.eau|reseau|canalisation|garde.corps|muret|\bmurs?\b|longrine|glissiere|marquage|\bligne|haie|cable|fourreau|gaine|drain|tuyau|conduite|chainette|joint|lineaire|corniche|acrotere|seuil|grillage|rail|barriere|lisse|plinthe|\bml\b/;
     const SURF=/enrobe|beton|dalle|pave|gazon|pelouse|espace.vert|\bsols?\b|revetement|carrelage|resine|stabilise|gravier|gravillon|chaussee|trottoir|parking|stationnement|voirie|plancher|toiture|enduit|peinture|terre vegetale|sable|platelage|surface|zone|parvis|placette|massif|prairie|desactive|calcaire|\bm2\b|m²/;
     const norm=s=>(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
