@@ -913,6 +913,27 @@ body.noscroll{overflow:hidden}
           A.x0=Math.min(A.x0,B.x0);A.x1=Math.max(A.x1,B.x1);A.y0=Math.min(A.y0,B.y0);A.y1=Math.max(A.y1,B.y1);
           A.pix=A.pix.concat(B.pix);blobs.splice(c,1);merged=true;break}}}
     const sw=blobs.filter(b=>b.pix.length>=30&&b.x1-b.x0>=3&&b.y1-b.y0>=3);   // pas les filets de couleur
+    // pastilles grises (béton, enrobé gris…) : aplat gris uni, entouré ou non d'un trait noir.
+    // Les mots du texte forment aussi des taches sombres, mais sans aplat gris qui remplit leur cadre.
+    const dark=(x,y)=>{const i=(y*W+x)*4;return d[i+3]>=128&&!chroma(d[i],d[i+1],d[i+2])&&Math.max(d[i],d[i+1],d[i+2])<245};
+    const seen2=new Uint8Array(zw*zh);
+    for(let y=zy0;y<zy1;y++)for(let x=zx0;x<zx1;x++){
+      const s0=(y-zy0)*zw+(x-zx0);if(seen2[s0]||!dark(x,y))continue;
+      const b={x0:x,x1:x,y0:y,y1:y,pix:[]},st=[s0];seen2[s0]=1;
+      while(st.length){const q=st.pop(),qx=q%zw+zx0,qy=(q/zw|0)+zy0,i=(qy*W+qx)*4;
+        b.pix.push([d[i],d[i+1],d[i+2]]);if(qx<b.x0)b.x0=qx;if(qx>b.x1)b.x1=qx;if(qy<b.y0)b.y0=qy;if(qy>b.y1)b.y1=qy;
+        for(const [nx,ny] of [[qx-1,qy],[qx+1,qy],[qx,qy-1],[qx,qy+1]]){
+          if(nx<zx0||nx>=zx1||ny<zy0||ny>=zy1)continue;const n=(ny-zy0)*zw+(nx-zx0);
+          if(!seen2[n]&&dark(nx,ny)){seen2[n]=1;st.push(n)}}}
+      const bw=b.x1-b.x0+1,bh=b.y1-b.y0+1;if(bw<8||bh<6)continue;
+      if(sw.some(o=>o.x0<=b.x1&&b.x0<=o.x1&&o.y0<=b.y1&&b.y0<=o.y1))continue;   // déjà une pastille de couleur
+      const cl=[];
+      b.pix.forEach(p=>{const l=(p[0]+p[1]+p[2])/3;if(l<70||l>242)return;
+        const c=cl.find(c=>dist(c.m,p)<16);
+        if(c){c.n++;for(let q=0;q<3;q++){c.s[q]+=p[q];c.m[q]=c.s[q]/c.n}}else cl.push({n:1,s:[...p],m:[...p]})});
+      const top=cl.sort((a,b)=>b.n-a.n)[0];
+      if(top&&top.n>=bw*bh*.4)sw.push({...b,cols:[top.m.map(Math.round)]});
+    }
     // textes de la zone, regroupés en lignes
     const T=texts.map(t=>({s:t.s,x0:t.x*W,x1:(t.x+t.w)*W,y0:t.y*H,y1:(t.y+t.h)*H}))
       .filter(t=>t.s.trim()&&t.x0>=L.x0-2&&t.x1<=L.x1+2&&t.y1>=L.y0&&t.y0<=L.y1)
@@ -949,7 +970,7 @@ body.noscroll{overflow:hidden}
       const cl=[];
       b.pix.forEach(p=>{const c=cl.find(c=>dist(c.m,p)<48);
         if(c){c.n++;for(let q=0;q<3;q++){c.s[q]+=p[q];c.m[q]=c.s[q]/c.n}}else cl.push({n:1,s:[...p],m:[...p]})});
-      const cols=cl.filter(c=>c.n>=b.pix.length*.15).sort((a,b)=>b.n-a.n).map(c=>c.m.map(Math.round));
+      const cols=b.cols||cl.filter(c=>c.n>=b.pix.length*.15).sort((a,b)=>b.n-a.n).map(c=>c.m.map(Math.round));
       if(cols.length)out.push({text,cols,pos:[b.y0,b.x0]});
     });
     return out;
@@ -968,7 +989,8 @@ body.noscroll{overflow:hidden}
     Ls.forEach(L=>legendEntries(d,W,H,L,texts||[]).forEach(e=>{
       if(ents.some(o=>o.tag!==L.tag&&o.text===e.text&&e.text&&dist(o.cols[0],e.cols[0])<24))return;   // même ligne dans les deux zones
       ents.push({...e,tag:L.tag})}));
-    const EC=[];ents.forEach((e,k)=>e.cols.forEach(rgb=>EC.push({rgb,k})));
+    // couleurs des pastilles : teintes (EC) et gris (GE, comptés à part pour ne pas prendre les traits)
+    const EC=[],GE=[];ents.forEach((e,k)=>e.cols.forEach(rgb=>(chroma(...rgb)?EC:GE).push({rgb,k})));
     const nearEnt=(R,G,B)=>{let best=-1,bd=2304;for(const c of EC){const dr=c.rgb[0]-R,dg=c.rgb[1]-G,db=c.rgb[2]-B,dd=dr*dr+dg*dg+db*db;if(dd<bd){bd=dd;best=c.k}}return best};
     const bins=new Map();let total=0;
     for(let y=0;y<H;y++){
@@ -1011,11 +1033,28 @@ body.noscroll{overflow:hidden}
         if(!chroma(R,G,B))continue;
         let best=EC.length?nearEnt(R,G,B):-1;
         if(best<0){let bd=2304;for(let j=0;j<C.length;j++){const c=C[j].rgb,dr=c[0]-R,dg=c[1]-G,db=c[2]-B,dd=dr*dr+dg*dg+db*db;if(dd<bd){bd=dd;best=nE+j}}}
-        if(best>=0){lab[p]=best;area[best]++}
+        if(best>=0)lab[p]=best;
+      }
+    }
+    /* Aplats gris des pastilles grises : un pixel compte s'il a la teinte et ses 8 voisins aussi
+       (les traits noirs et leur anticrénelage gris sont ainsi écartés), puis on rajoute le bord de l'aplat. */
+    if(GE.length){
+      const near=(i,c)=>{const dr=d[i]-c[0],dg=d[i+1]-c[1],db=d[i+2]-c[2];return dr*dr+dg*dg+db*db<400};
+      const add=new Int16Array(W*H).fill(-1);
+      for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++){
+        const p=y*W+x;if(lab[p]!==-1)continue;
+        for(const g of GE){if(!near(p*4,g.rgb))continue;let ok=true;
+          for(let dy=-1;dy<=1&&ok;dy++)for(let dx=-1;dx<=1;dx++){const q=p+dy*W+dx;if(lab[q]===-2||!near(q*4,g.rgb)){ok=false;break}}
+          if(ok){add[p]=g.k;break}}
+      }
+      for(let p=0;p<W*H;p++)if(add[p]>=0)lab[p]=add[p];
+      for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++){
+        const p=y*W+x;if(lab[p]!==-1)continue;
+        for(const q of [p-1,p+1,p-W,p+W]){const k=add[q];if(k>=0&&GE.some(g=>g.k===k&&near(p*4,g.rgb))){lab[p]=k;break}}
       }
     }
     for(let y=0;y<H;y++)for(let x=0;x<W;x++){
-      const p=y*W+x,j=lab[p];if(j<0)continue;
+      const p=y*W+x,j=lab[p];if(j<0)continue;area[j]++;
       if(x===0||lab[p-1]!==j)per[j]++;if(x===W-1||lab[p+1]!==j)per[j]++;
       if(y===0||lab[p-W]!==j)per[j]++;if(y===H-1||lab[p+W]!==j)per[j]++;
     }
@@ -1086,8 +1125,8 @@ body.noscroll{overflow:hidden}
     const im=g.getImageData(0,0,cv.width,cv.height),d=im.data;
     for(let i=0;i<d.length;i+=4){
       const R=d[i],G=d[i+1],B=d[i+2];
-      if(Math.max(R,G,B)-Math.min(R,G,B)>=24){
-        let hit=null;for(const c of cols){const dr=c.rgb[0]-R,dg=c.rgb[1]-G,db=c.rgb[2]-B;if(dr*dr+dg*dg+db*db<2304){hit=c;break}}
+      if(Math.max(R,G,B)<245||chroma(R,G,B)){
+        let hit=null;for(const c of cols){const dr=c.rgb[0]-R,dg=c.rgb[1]-G,db=c.rgb[2]-B;if(dr*dr+dg*dg+db*db<(chroma(...c.rgb)?2304:400)){hit=c;break}}
         if(hit){if(hit.f!==1){const f=hit.f;d[i]=255-(255-R)*f;d[i+1]=255-(255-G)*f;d[i+2]=255-(255-B)*f}continue}
       }
       d[i]=R+(255-R)*.82;d[i+1]=G+(255-G)*.82;d[i+2]=B+(255-B)*.82;
