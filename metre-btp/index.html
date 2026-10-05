@@ -1255,7 +1255,7 @@ body.noscroll{overflow:hidden}
         b.textContent=Math.round(z.k*100)+' % · Recadrer'}
       else b?.remove()};
     const setZ=(k,mx,my)=>{const c=view.querySelector('canvas,img');if(!c)return;
-      const w=c.clientWidth,h=c.clientHeight;k=Math.min(Math.max(k,1),20);
+      const w=c.clientWidth,h=c.clientHeight;k=Math.min(Math.max(k,1),200);
       if(mx==null){mx=w/2;my=h/2}
       z.x=mx-(mx-z.x)*k/z.k;z.y=my-(my-z.y)*k/z.k;z.k=k;
       z.x=Math.min(0,Math.max(w*(1-k),z.x));z.y=Math.min(0,Math.max(h*(1-k),z.y));z.w=w;z.h=h;applyZ();
