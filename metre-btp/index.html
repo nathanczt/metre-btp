@@ -199,6 +199,8 @@ main p{color:var(--muted);margin:6px 0 0}
 .recap-list .tools{display:flex;align-items:center;gap:6px}
 .recap-list .tools .sm{padding:2px 8px;font-size:11.5px}
 .sws{display:flex;gap:2px;cursor:pointer;flex-wrap:wrap;max-width:62px}
+.sws .lnb{align-self:center}
+.lnb{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:var(--accent);color:#fff;font-size:11px;font-weight:700;flex:none}
 .grp .sws .sw{width:12px;height:18px}
 .grp .lab{font-style:normal}
 .sm.primary-sm{background:var(--accent);border-color:var(--accent);color:#fff}
@@ -729,7 +731,7 @@ body.noscroll{overflow:hidden}
       if(picking===k){z.cb.innerHTML=`<span class="msg">${z.pickMsg}</span>`;return}
       if(!r[k]){z.lp.textContent='';z.cb.innerHTML=`<span class="msg">${z.none}</span>`;return}
       z.cb.innerHTML='<span class="msg">Chargement de la légende…</span>';
-      try{const cv=await api.crop(r[k]);if(my!==z.tok)return;z.lp.textContent=api.pages()>1?'page '+r[k].page:'';cv.setAttribute('aria-label',z.label);z.cb.innerHTML='';z.cb.appendChild(cv)}
+      try{if(k==='legend2'&&r.dwg&&legDwg())api.redraw();const cv=await api.crop(r[k],k==='legend2'&&r.dwg&&dwgLeg.E?dwgLeg.E.map((e,i)=>({b:e.box,n:i+1,c:e.c})):null);if(my!==z.tok)return;z.lp.textContent=api.pages()>1?'page '+r[k].page:'';cv.setAttribute('aria-label',z.label);z.cb.innerHTML='';z.cb.appendChild(cv)}
       catch(e){if(my===z.tok)z.cb.innerHTML='<span class="msg">Impossible d\'afficher la légende.</span>'}
     }
     function render(){setBtns();renderZone('legend');renderZone('legend2');buildUse()}
@@ -795,6 +797,13 @@ body.noscroll{overflow:hidden}
     /* Sans légende tracée : une ligne par calque actif. Légende tracée sur le plan (« Encadrer la légende ») :
        une ligne par échantillon de la légende, métré sur les objets du plan identiques (calques gelés exclus). */
     let dwgLeg={k:null,E:null};
+    // Lignes de la légende DWG encadrée (recalculées si la zone, les zones exclues ou les calques gelés changent) ; vrai si recalculées
+    function legDwg(){const D=r.dwg;if(!D||!r.legend2)return false;
+      const off=new Set(D.layers.map((L,i)=>((r.ocg||{})[L.name]??L.on)?-1:i).filter(i=>i>=0));
+      const ck=JSON.stringify([r.legend2,r.excl||[],[...off]]);if(dwgLeg.k===ck)return false;
+      dwgLeg={k:ck,E:dwgLegend(D,r.legend2,off,r.excl)};
+      // mise en avant sur le plan : objets métrés + échantillon de la légende
+      dwgHL.set(D,new Map(dwgLeg.E.map(e=>[e.key,new Set([...e.items,...e.smp])])));return true}
     function buildUseDwg(){
       const D=r.dwg,legMode=!!r.legend2;
       useLeg.classList.toggle('has-leg',legMode||picking==='legend2');
@@ -803,15 +812,12 @@ body.noscroll{overflow:hidden}
       r.labels=r.labels||{};r.selected=r.selected||[];r.measure=r.measure||{};
       let rows;
       if(legMode){
-        const off=new Set(D.layers.map((L,i)=>((r.ocg||{})[L.name]??L.on)?-1:i).filter(i=>i>=0));
-        const ck=JSON.stringify([r.legend2,r.excl||[],[...off]]);
-        if(dwgLeg.k!==ck){dwgLeg={k:ck,E:dwgLegend(D,r.legend2,off,r.excl)};dwgHL.set(D,new Map(dwgLeg.E.map(e=>[e.key,e.items])));
-          if(r.selected.some(k=>k.startsWith('D:')))setTimeout(()=>api.redraw())}
+        if(legDwg())setTimeout(()=>{api.redraw();renderZone('legend2')});
         const m=D.m;
-        rows=dwgLeg.E.map((e,i)=>{const auto=e.label||'Légende n°'+(i+1),lab=norm(r.labels[e.key]??auto);
+        rows=dwgLeg.E.map((e,i)=>{const nb=i+1;const auto=e.label||'Légende n°'+(i+1),lab=norm(r.labels[e.key]??auto);
           const m2=(e.kind==='f'?e.q.fill:e.q.closed)*m*m,ml=(e.kind==='f'?e.q.per:e.q.len)*m;
           const def=LIN.test(lab)?'ml':SURF.test(lab)?'m2':e.kind==='f'||(e.closed&&!e.thin)?'m2':'ml';
-          return {key:e.key,auto,q:{m2,ml,n:e.items.size,byLayer:e.byLayer},def,m2,members:[{rgb:cssRgb(e.c),key:e.key}]}});
+          return {key:e.key,nb,auto,q:{m2,ml,n:e.items.size,byLayer:e.byLayer},def,m2,members:[{rgb:cssRgb(e.c),key:e.key}]}});
       }else{
         const qk=JSON.stringify(r.excl||[]);if(dwgQ.k!==qk)dwgQ={k:qk,Q:dwgQuantities(D,r.excl)};const Q=dwgQ.Q,act=new Set(api.layersNow().filter(g=>g.visible).map(g=>g.name));
         rows=D.layers.map((L,i)=>({L,i,q:Q.get(i)})).filter(o=>o.q&&act.has(o.L.name)&&(o.q.m2>0||o.q.ml>0)).map(({L,q})=>{
@@ -828,7 +834,7 @@ body.noscroll{overflow:hidden}
         const on=r.selected.includes(it.key),li=document.createElement('li');li.className=on?'on':'';it.li=li;
         const k=r.measure[it.key]||it.def;
         li.innerHTML=`<input type="checkbox" class="pick"${on?' checked':''} aria-label="Sélectionner ce calque">
-          <span class="sws"><span class="sw" style="background:rgb(${it.members[0].rgb.join(',')})"></span></span>
+          <span class="sws">${it.nb?`<span class="lnb" title="Ligne n°${it.nb} de la légende encadrée">${it.nb}</span>`:''}<span class="sw" style="background:rgb(${it.members[0].rgb.join(',')})"></span></span>
           <input class="nm" aria-label="Nom de la ligne" title="Nom de la ligne (modifiable) : par défaut, nom du calque"><span class="uq qty"></span>
           <div class="prop"><span class="seg" role="group" aria-label="Type de mesure"><button data-k="m2" title="Surface des hachures et remplissages du calque">Surface</button><button data-k="ml" title="Longueur des traits du calque">Linéaire</button></span>
             <label class="ctr-l"${on?'':' hidden'}>Contraste <input type="range" class="ctr" min="-100" max="100" step="5" value="${(r.contrast||{})[it.key]||0}" title="Contraste de ce calque sur le plan (double-clic : réinitialiser)"></label></div>`;
@@ -1738,7 +1744,8 @@ body.noscroll{overflow:hidden}
       if(!m.length){m=plan.filter(it=>sig.has(dSig(it,false)));byLayer=false}
       const label=c.texts.sort((a,b)=>b.b[3]-a.b[3]||a.b[0]-b.b[0]).map(t=>t.it.s.trim()).join(' ').replace(/\s+/g,' ');
       const w=c.b[2]-c.b[0],h=c.b[3]-c.b[1];
-      out.push({key:'D:'+key,label,kind:prim[0].k,closed:prim.every(it=>it.z),thin:Math.min(w,h)<Math.max(w,h)*.15,c:prim[0].c,items:new Set(m),byLayer,q:dQty(m)});
+      const bx=c.texts.reduce((u,t)=>[Math.min(u[0],t.b[0]),Math.min(u[1],t.b[1]),Math.max(u[2],t.b[2]),Math.max(u[3],t.b[3])],c.b.slice());
+      out.push({key:'D:'+key,label,box:bx,smp:c.items,kind:prim[0].k,closed:prim.every(it=>it.z),thin:Math.min(w,h)<Math.max(w,h)*.15,c:prim[0].c,items:new Set(m),byLayer,q:dQty(m)});
     }
     return out;
   }
@@ -1776,12 +1783,23 @@ body.noscroll{overflow:hidden}
       (r.selected||[]).forEach(k=>{
         if(mm){if(k.startsWith('D:')&&mm.has(k))mm.get(k).forEach(it=>IM.set(it,fac(k)))}
         else if(k.startsWith('L:')){const i=D.layers.findIndex(L=>L.name===k.slice(2));if(i>=0)LM.set(i,fac(k))}});
+      if(mm&&!IM.size)mm.forEach(S=>S.forEach(it=>IM.set(it,1)));   // aucune ligne cochée : toutes les zones de la légende ressortent
       if(!LM.size&&!IM.size)return null;return it=>IM.get(it)??LM.get(it.l)??0};
     const draw=()=>{const s=drawDwg(D,hidden(),null,3000,hl());pres.setRaw(r.rot?rotated(s.canvas,s.canvas.width,s.canvas.height,r.rot):s.canvas)};
     const list=()=>D.layers.map((L,i)=>({id:L.name,name:L.name,visible:(r.ocg||{})[L.name]??L.on,c:L.c})).filter((g,i)=>D.items.some(it=>it.l===i));
     setTimeout(()=>{try{draw()}catch(e){view.innerHTML='<span class="msg">Impossible d\'afficher ce DWG.</span>'}});
     return {redraw:draw,page:()=>1,pages:()=>1,setFilter:pres.setFilter,setOverlay:pres.setOverlay,
-      crop:async rect=>{const s=drawDwg(D,hidden(),rect,1600);return r.rot?rotated(s.canvas,s.canvas.width,s.canvas.height,r.rot):s.canvas},
+      crop:async(rect,marks)=>{const s=drawDwg(D,hidden(),rect,1600);
+        if(marks&&marks.length){   // lignes de légende reconnues : cadre numéroté
+          const R=dRect(D,rect),cv=s.canvas,g=cv.getContext('2d'),W=cv.width,H=cv.height,u=Math.max(W,H)/400;
+          const X=x=>(x-R[0])/(R[2]-R[0])*W,Y=y=>(R[3]-y)/(R[3]-R[1])*H;
+          g.save();g.lineWidth=Math.max(1.5,u*1.2);g.font='bold '+Math.round(Math.max(11,u*9))+'px Arial, sans-serif';g.textBaseline='middle';g.textAlign='center';
+          for(const m of marks){const p=Math.max(2,u*3),x0=X(m.b[0])-p,x1=X(m.b[2])+p,y0=Y(m.b[3])-p,y1=Y(m.b[1])+p;
+            g.strokeStyle='#2447a8';g.setLineDash([]);g.strokeRect(x0,y0,x1-x0,y1-y0);
+            const rr=Math.max(8,u*6),cx=x0,cy=y0;g.fillStyle='#2447a8';g.beginPath();g.arc(cx,cy,rr,0,Math.PI*2);g.fill();
+            g.fillStyle='#fff';g.fillText(String(m.n),cx,cy+.5)}
+          g.restore()}
+        return r.rot?rotated(s.canvas,s.canvas.width,s.canvas.height,r.rot):s.canvas},
       source:async()=>drawDwg(D,hidden(),null,1500),
       layers:async()=>list(),layersNow:list,
       setLayer:(id,v)=>{(r.ocg=r.ocg||{})[id]=v}};
