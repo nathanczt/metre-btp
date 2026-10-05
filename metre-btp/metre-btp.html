@@ -261,7 +261,7 @@ body.noscroll{overflow:hidden}
 .view.zoomed{cursor:grab}.view.panning{cursor:grabbing}
 .view canvas.sharp{position:absolute;max-width:none;max-height:none;object-fit:fill;box-shadow:none;pointer-events:none}
 .view .zoom-b{position:absolute;top:8px;right:8px;z-index:2;box-shadow:0 1px 4px rgba(28,37,48,.15)}
-.view.picking{cursor:crosshair;outline:2px solid var(--accent);outline-offset:-2px}
+.view.picking{cursor:crosshair;touch-action:none;outline:2px solid var(--accent);outline-offset:-2px}
 .view.picking canvas,.view.picking img{pointer-events:none;user-select:none}
 .sel{position:absolute;border:2px solid var(--accent);background:rgba(36,71,168,.12);pointer-events:none}
 @media (max-width:900px){.box-body{grid-template-columns:minmax(0,1fr)}.pane.legend{border-left:0;border-top:1px solid var(--side-line);contain:none}.leg-view{max-height:60vh}}
@@ -681,7 +681,7 @@ body.noscroll{overflow:hidden}
         none:'Aucune zone de légende. Cliquez sur « Sélectionner sur le plan », puis tracez un rectangle autour de la légende : les couleurs du récapitulatif prendront les noms de la légende.'},
       legend2:{btn:pick2,clr:clear2,cb:box.querySelector('.use-crop'),lp:box.querySelector('.leg2-page'),tok:0,label:'Légende automatique',
         pickMsg:'Tracez un rectangle autour de la légende à utiliser sur l\'aperçu.',
-        none:'Aucune légende choisie. Cliquez sur « Sélectionner sur le plan », puis tracez un rectangle autour de la légende à utiliser : puis cliquez sur « Valider » : ses libellés serviront en priorité à nommer les lignes du récapitulatif.'}
+        none:'Aucune légende choisie. Cliquez sur « Encadrer la légende », puis tracez un rectangle autour de la légende à utiliser : puis cliquez sur « Valider » : ses libellés serviront en priorité à nommer les lignes du récapitulatif.'}
     };
     /* Zones exclues : parties du plan à ne pas compter (vue répétée en haut et en bas, cartouche…).
        Rectangles en fractions de la page non pivotée, comme la légende ; hachurées sur l'aperçu. */
@@ -712,7 +712,7 @@ body.noscroll{overflow:hidden}
     }
     api.setOverlay(drawExcl);
     const setBtns=()=>{renderExcl();for(const k in zones){const z=zones[k];
-      z.btn.textContent=picking===k?'Annuler':r[k]?'Changer la zone':'Sélectionner sur le plan';
+      z.btn.textContent=picking===k?'Annuler':r[k]?'Changer la zone':k==='legend2'?'Encadrer la légende':'Sélectionner sur le plan';
       z.btn.disabled=!!picking&&picking!==k;z.clr.hidden=!!picking||!r[k]}
       // Légende manuelle : le bouton sert à choisir les zones du plan par clic
       pick.textContent=picking==='man'?'Terminer la sélection':'Sélectionner sur le plan';
@@ -792,7 +792,7 @@ body.noscroll{overflow:hidden}
     /* DWG : une ligne par calque actif (non gelé) ayant un dessin ; quantités lues dans le dessin.
        Clé « L:nom du calque » ; cocher une ligne met le calque en avant sur l'aperçu. */
     let dwgQ={k:null,Q:null};
-    /* Sans légende tracée : une ligne par calque actif. Légende tracée sur le plan (« Sélectionner sur le plan ») :
+    /* Sans légende tracée : une ligne par calque actif. Légende tracée sur le plan (« Encadrer la légende ») :
        une ligne par échantillon de la légende, métré sur les objets du plan identiques (calques gelés exclus). */
     let dwgLeg={k:null,E:null};
     function buildUseDwg(){
@@ -822,7 +822,7 @@ body.noscroll{overflow:hidden}
       useList.innerHTML='';
       if(!rows.length){useInfo.textContent='';
         useList.innerHTML=legMode?'<li class="msg">Aucun échantillon trouvé dans la zone tracée. Vérifiez que le rectangle englobe bien la légende (bouton « Changer la zone »), et que ses calques ne sont pas gelés.</li>'
-          :'<li class="msg">Aucun calque actif avec un dessin. Dégelez des calques dans la liste « Calques », ou cliquez sur « Sélectionner sur le plan » pour tracer la légende du plan.</li>';
+          :'<li class="msg">Aucun calque actif avec un dessin. Dégelez des calques dans la liste « Calques », ou cliquez sur « Encadrer la légende » pour tracer la légende du plan.</li>';
         useMerge.hidden=true;buildStruct([]);return}
       rows.forEach(it=>{
         const on=r.selected.includes(it.key),li=document.createElement('li');li.className=on?'on':'';it.li=li;
@@ -1076,7 +1076,12 @@ body.noscroll{overflow:hidden}
     clear2.onclick=()=>{delete r.legend2;addPlan(r).catch(()=>{});render();recap()};
     view.addEventListener('pointerdown',e=>{
       if(!picking)return;
-      if(picking==='man'){e.preventDefault();pickZoneAt(e);return}const media=view.querySelector('canvas,img');if(!media)return;
+      if(picking==='man'){e.preventDefault();pickZoneAt(e);
+        // un tracé ici ne fait rien : on oriente vers l'encadrement de la légende automatique
+        const x0=e.clientX,y0=e.clientY,mv=ev=>{if(Math.hypot(ev.clientX-x0,ev.clientY-y0)<12)return;end();
+          manInfo.textContent='ici, cliquez sur les zones une par une ; pour encadrer la légende, utilisez « Encadrer la légende » dans Légende automatique'},
+          end=()=>{view.removeEventListener('pointermove',mv);view.removeEventListener('pointerup',end)};
+        view.addEventListener('pointermove',mv);view.addEventListener('pointerup',end);return}const media=view.querySelector('canvas,img');if(!media)return;
       e.preventDefault();view.setPointerCapture(e.pointerId);
       // zone réellement occupée par le plan dans l'élément (object-fit:contain)
       const br=media.getBoundingClientRect(),vr=view.getBoundingClientRect();
