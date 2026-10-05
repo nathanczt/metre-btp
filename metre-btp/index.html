@@ -242,6 +242,7 @@ main p{color:var(--muted);margin:6px 0 0}
 .pane.full .view{flex:1;aspect-ratio:auto;width:100%;min-height:0}
 body.noscroll{overflow:hidden}
 .view.zoomed{cursor:grab}.view.panning{cursor:grabbing}
+.view canvas.sharp{position:absolute;max-width:none;max-height:none;object-fit:fill;box-shadow:none;pointer-events:none}
 .view .zoom-b{position:absolute;top:8px;right:8px;z-index:2;box-shadow:0 1px 4px rgba(28,37,48,.15)}
 .view.picking{cursor:crosshair;outline:2px solid var(--accent);outline-offset:-2px}
 .view.picking canvas,.view.picking img{pointer-events:none;user-select:none}
@@ -662,11 +663,11 @@ body.noscroll{overflow:hidden}
         b.onclick=()=>{r.excl.splice(i,1);if(!r.excl.length)delete r.excl;addPlan(r).catch(()=>{});renderExcl();api.setOverlay(drawExcl);recap(true)};
         exBar.appendChild(b)});
     }
-    function drawExcl(cv){
-      const g=cv.getContext('2d'),rot=r.rot||0,W=cv.width,H=cv.height;
+    function drawExcl(cv,win){   // win : partie du plan dessinée dans cv (zoom), plan entier sinon
+      const g=cv.getContext('2d'),rot=r.rot||0,v=win||{x:0,y:0,w:1,h:1},W=cv.width/v.w,H=cv.height/v.h;
       exOnPage().forEach(e=>{
         const a=toRot(e.x,e.y,rot),b=toRot(e.x+e.w,e.y+e.h,rot);
-        const x=Math.min(a[0],b[0])*W,y=Math.min(a[1],b[1])*H,w=Math.abs(a[0]-b[0])*W,h=Math.abs(a[1]-b[1])*H;
+        const x=(Math.min(a[0],b[0])-v.x)*W,y=(Math.min(a[1],b[1])-v.y)*H,w=Math.abs(a[0]-b[0])*W,h=Math.abs(a[1]-b[1])*H;
         g.save();g.beginPath();g.rect(x,y,w,h);g.clip();
         g.fillStyle='rgba(255,255,255,.7)';g.fillRect(x,y,w,h);
         g.strokeStyle='rgba(179,38,30,.45)';g.lineWidth=Math.max(1,W/400);
@@ -1238,26 +1239,47 @@ body.noscroll{overflow:hidden}
     g.putImageData(im,0,0);return cv;
   }
   // Affiche l'aperçu filtré ; les mises à jour rapides (curseur) sont regroupées par image
-  function presenter(view,label){
+  function presenter(view,label,sharpFn){
     let raw=null,filter=[],queued=false,overlay=null;
     /* Zoom à la molette (autour du pointeur) et déplacement à la souris quand le plan est zoomé.
        Le zoom est une transformation CSS du canvas : les clics sur le plan restent justes. */
-    const z={k:1,x:0,y:0,w:0,h:0},cb=[];
+    const z={k:1,x:0,y:0,w:0,h:0};
     const applyZ=()=>{const c=view.querySelector('canvas,img');if(!c)return;
       if(z.k>1&&(Math.abs(c.clientWidth-z.w)>2||Math.abs(c.clientHeight-z.h)>2)){z.k=1;z.x=z.y=0}   // encadré redimensionné : on recadre
       c.style.transformOrigin='0 0';c.style.transform=z.k>1?`translate(${z.x}px,${z.y}px) scale(${z.k})`:'';
+      const sh=view.querySelector('.sharp');if(sh){if(z.k>1)sh.style.transform=c.style.transform;else sh.remove()}
       view.classList.toggle('zoomed',z.k>1);
       let b=view.querySelector('.zoom-b');
       if(z.k>1){if(!b){b=document.createElement('button');b.className='sm zoom-b';b.title='Revenir au plan entier (double-clic sur le plan)';
           b.onpointerdown=e=>e.stopPropagation();b.onclick=e=>{e.stopPropagation();setZ(1)};view.appendChild(b)}
         b.textContent=Math.round(z.k*100)+' % · Recadrer'}
       else b?.remove()};
-    let zT;const setZ=(k,mx,my)=>{const c=view.querySelector('canvas,img');if(!c)return;
+    const setZ=(k,mx,my)=>{const c=view.querySelector('canvas,img');if(!c)return;
       const w=c.clientWidth,h=c.clientHeight;k=Math.min(Math.max(k,1),20);
       if(mx==null){mx=w/2;my=h/2}
       z.x=mx-(mx-z.x)*k/z.k;z.y=my-(my-z.y)*k/z.k;z.k=k;
       z.x=Math.min(0,Math.max(w*(1-k),z.x));z.y=Math.min(0,Math.max(h*(1-k),z.y));z.w=w;z.h=h;applyZ();
-      clearTimeout(zT);zT=setTimeout(()=>cb.forEach(f=>f(z.k)),250)};
+      sharpSoon()};
+    /* Zoomé : la partie visible est redessinée à la résolution de l'écran (calque .sharp posé sur
+       le canvas, même transformation), le canvas de base gardant les clics et la mise en page. */
+    let sT,sTok=0;const sharpSoon=()=>{clearTimeout(sT);sT=setTimeout(sharpNow,150)};
+    async function sharpNow(){
+      const c=view.querySelector('canvas');if(!sharpFn||!c||z.k<=1||!raw)return;
+      const w=c.clientWidth,h=c.clientHeight,nw=c.width,nh=c.height,fk=Math.min(w/nw,h/nh);
+      const cx0=(w-nw*fk)/2,cy0=(h-nh*fk)/2,cw=nw*fk,ch=nh*fk;
+      const ox=c.offsetLeft,oy=c.offsetTop,VW=view.clientWidth,VH=view.clientHeight;
+      const L0=Math.max(cx0,(-ox-z.x)/z.k),L1=Math.min(cx0+cw,(VW-ox-z.x)/z.k);
+      const T0=Math.max(cy0,(-oy-z.y)/z.k),T1=Math.min(cy0+ch,(VH-oy-z.y)/z.k);
+      if(L1-L0<1||T1-T0<1)return;
+      const win={x:(L0-cx0)/cw,y:(T0-cy0)/ch,w:(L1-L0)/cw,h:(T1-T0)/ch};
+      let q=z.k*(window.devicePixelRatio||1);const A=(L1-L0)*(T1-T0)*q*q;if(A>20e6)q*=Math.sqrt(20e6/A);
+      const pxW=Math.max(1,Math.round((L1-L0)*q)),pxH=Math.max(1,Math.round((T1-T0)*q));
+      const my=++sTok;let src;try{src=await sharpFn(win,pxW,pxH)}catch(e){return}
+      if(my!==sTok||z.k<=1||!src)return;
+      const cv=highlight(src,filter);if(overlay)overlay(cv,win);
+      cv.className='sharp';cv.setAttribute('aria-hidden','true');
+      Object.assign(cv.style,{left:ox+L0+'px',top:oy+T0+'px',width:L1-L0+'px',height:T1-T0+'px',transformOrigin:`${-L0}px ${-T0}px`});
+      view.querySelector('.sharp')?.remove();view.insertBefore(cv,c.nextSibling);applyZ()}
     view.addEventListener('wheel',e=>{const c=view.querySelector('canvas,img');if(!c)return;
       e.preventDefault();const vr=view.getBoundingClientRect();
       const d=e.deltaMode===1?e.deltaY*33:e.deltaMode===2?e.deltaY*400:e.deltaY;
@@ -1272,9 +1294,10 @@ body.noscroll{overflow:hidden}
     view.addEventListener('dblclick',()=>{if(!view.classList.contains('picking')&&z.k>1)setZ(1)});
     const show=()=>{queued=false;if(!raw)return;
       if(raw.width&&raw.height&&z.k===1)view.style.setProperty('--ar',(raw.width+20)/(raw.height+20));   // + marge intérieure de 10 px (inchangé pendant un zoom)
-      const cv=highlight(raw,filter);if(overlay)overlay(cv);cv.setAttribute('aria-label',label);view.innerHTML='';view.appendChild(cv);applyZ()};
+      const cv=highlight(raw,filter);if(overlay)overlay(cv);cv.setAttribute('aria-label',label);
+      const sh=view.querySelector('.sharp');view.innerHTML='';view.appendChild(cv);if(sh)view.appendChild(sh);applyZ();if(z.k>1)sharpSoon()};
     return {
-      zoom:()=>z.k,onZoom:f=>cb.push(f),
+      zoom:()=>z.k,
       setRaw:c=>{raw=c;show()},
       setOverlay:f=>{overlay=f;show()},
       setFilter:cols=>{const s=JSON.stringify(cols);if(s===JSON.stringify(filter))return;filter=cols;
@@ -1283,7 +1306,9 @@ body.noscroll{overflow:hidden}
   }
   function showImg(r,view){
     const url=URL.createObjectURL(r.blob);urls.push(url);
-    const img=new Image();img.alt=r.name;const pres=presenter(view,r.name);
+    const img=new Image();img.alt=r.name;
+    const pres=presenter(view,r.name,async(win,pw,ph)=>{if(!img.naturalWidth)return null;const rot=r.rot||0,a=toUnrot(win.x,win.y,rot),b=toUnrot(win.x+win.w,win.y+win.h,rot);
+      return cropTo(img,img.naturalWidth,img.naturalHeight,{x:Math.min(a[0],b[0]),y:Math.min(a[1],b[1]),w:Math.abs(a[0]-b[0]),h:Math.abs(a[1]-b[1])},rot,Math.max(pw,ph))});
     const draw=()=>{if(!img.naturalWidth)return;
       const k=Math.min(1,3000/Math.max(img.naturalWidth,img.naturalHeight));
       pres.setRaw(rotated(img,img.naturalWidth*k,img.naturalHeight*k,r.rot||0))};
@@ -1531,12 +1556,14 @@ body.noscroll{overflow:hidden}
     return {canvas:cv,texts,mPerPx:D.m/k};
   }
   function showDwg(r,view){
-    const pres=presenter(view,r.name),D=r.dwg;
+    const D=r.dwg;
+    const pres=presenter(view,r.name,async(win,pw,ph)=>{const rot=r.rot||0,a=toUnrot(win.x,win.y,rot),b=toUnrot(win.x+win.w,win.y+win.h,rot);
+      const s=drawDwg(D,hidden(),{x:Math.min(a[0],b[0]),y:Math.min(a[1],b[1]),w:Math.abs(a[0]-b[0]),h:Math.abs(a[1]-b[1])},Math.max(pw,ph));
+      return rot?rotated(s.canvas,s.canvas.width,s.canvas.height,rot):s.canvas});
     const hidden=()=>{const o=r.ocg||{};return new Set(D.layers.map((L,i)=>(o[L.name]??L.on)?-1:i).filter(i=>i>=0))};
-    const draw=()=>{const s=drawDwg(D,hidden(),null,Math.min(3000*pres.zoom(),8000));pres.setRaw(r.rot?rotated(s.canvas,s.canvas.width,s.canvas.height,r.rot):s.canvas)};
+    const draw=()=>{const s=drawDwg(D,hidden(),null,3000);pres.setRaw(r.rot?rotated(s.canvas,s.canvas.width,s.canvas.height,r.rot):s.canvas)};
     const list=()=>D.layers.map((L,i)=>({id:L.name,name:L.name,visible:(r.ocg||{})[L.name]??L.on,c:L.c})).filter((g,i)=>D.items.some(it=>it.l===i));
     setTimeout(()=>{try{draw()}catch(e){view.innerHTML='<span class="msg">Impossible d\'afficher ce DWG.</span>'}});
-    let zk=1;pres.onZoom(k=>{const q=Math.min(k,8000/3000);if(Math.abs(q-zk)>.3||(q===1)!==(zk===1)){zk=q;try{draw()}catch(e){}}});
     return {redraw:draw,page:()=>1,pages:()=>1,setFilter:pres.setFilter,setOverlay:pres.setOverlay,
       crop:async rect=>{const s=drawDwg(D,hidden(),rect,1600);return r.rot?rotated(s.canvas,s.canvas.width,s.canvas.height,r.rot):s.canvas},
       source:async()=>drawDwg(D,hidden(),null,1500),
@@ -1544,7 +1571,14 @@ body.noscroll{overflow:hidden}
       setLayer:(id,v)=>{(r.ocg=r.ocg||{})[id]=v}};
   }
   function showPdf(r,view,pager){
-    let draw=()=>{},n=1,doc=null,docP,ocP,oc=null;const pres=presenter(view,r.name);
+    let draw=()=>{},n=1,doc=null,docP,ocP,oc=null;
+    const pres=presenter(view,r.name,async(win,pw,ph)=>{if(!doc)return null;   // partie visible du plan zoomé, nette
+      const page=await doc.getPage(n),rotation=((page.rotate||0)+(r.rot||0))%360,base=page.getViewport({scale:1,rotation});
+      const vp=page.getViewport({scale:pw/(win.w*base.width),rotation});
+      const cv=document.createElement('canvas');cv.width=pw;cv.height=ph;const ctx=cv.getContext('2d');
+      ctx.fillStyle='#fff';ctx.fillRect(0,0,pw,ph);await ocP;
+      await page.render({canvasContext:ctx,viewport:vp,transform:[1,0,0,1,-win.x*vp.width,-win.y*vp.height],...(oc?{optionalContentConfigPromise:Promise.resolve(oc)}:{})}).promise;
+      return cv});
     // Calques : r.ocg = {id du calque: visible} ne garde que les choix faits à la main
     const ocList=()=>{const G=oc?.getGroups?.();if(!G)return [];
       const ids=(oc.getOrder?.()||[]).flat(Infinity).map(o=>typeof o==='string'?o:null).filter(id=>id&&G[id]);
@@ -1601,7 +1635,7 @@ body.noscroll{overflow:hidden}
         const base=page.getViewport({scale:1,rotation});
         const dpr=window.devicePixelRatio||1;
         const fit=Math.min((view.clientWidth||600)/base.width,(view.clientHeight||420)/base.height);
-        const zk=pres.zoom(),scale=Math.min(fit*dpr*1.5*zk,zk>1?Math.sqrt(36e6/(base.width*base.height)):3000/Math.max(base.width,base.height));   // zoomé : rendu plus fin (36 Mpx au plus)
+        const scale=Math.min(fit*dpr*1.5,3000/Math.max(base.width,base.height));
         const vp=page.getViewport({scale,rotation});
         const cv=document.createElement('canvas');cv.width=vp.width;cv.height=vp.height;
         await rnd(page,cv.getContext('2d'),vp);
@@ -1617,7 +1651,6 @@ body.noscroll{overflow:hidden}
         const go=d=>{const k=n+d;if(k<1||k>doc.numPages)return;n=k;draw()};
         pager.querySelector('.pg-prev').onclick=()=>go(-1);pager.querySelector('.pg-next').onclick=()=>go(1);
       }
-      let zq=1;pres.onZoom(k=>{if(Math.abs(k-zq)/zq>.25||(k===1)!==(zq===1)){zq=k;draw()}});
       await draw();
     }catch(e){view.innerHTML='<span class="msg">Impossible d\'afficher ce PDF.</span>'}})();
     return api;
