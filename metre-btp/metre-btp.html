@@ -133,11 +133,20 @@ main p{color:var(--muted);margin:6px 0 0}
 .struct-list .uq{font-size:12.5px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
 .excl-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:8px 12px;border-top:1px solid var(--side-line);font-size:12.5px;color:var(--muted)}
 .excl-bar[hidden]{display:none}
-/* Calques du PDF : cases à cocher sous l'aperçu */
-.ocg-bar{display:flex;align-items:center;gap:6px 14px;flex-wrap:wrap;padding:8px 12px;border-top:1px solid var(--side-line);font-size:12.5px;color:var(--muted);max-height:30vh;overflow:auto}
-.ocg-bar[hidden],.ocg-btn[hidden]{display:none}
-.ocg-bar label{display:inline-flex;align-items:center;gap:5px;color:var(--ink);cursor:pointer}
+/* Geler les calques : plan en plein écran, liste des calques sur le côté */
+.ocg-bar,.ocg-btn[hidden]{display:none}
+.pane.full.ocg-on{display:grid;grid-template-columns:minmax(0,1fr) 280px;grid-template-rows:auto minmax(0,1fr)}
+.pane.full.ocg-on>.pane-h{grid-column:1/-1}
+.pane.full.ocg-on>:not(.pane-h):not(.ocg-bar){grid-column:1}
+.pane.full.ocg-on>.view{grid-row:2;height:100%}
+.pane.full.ocg-on>.ocg-bar{display:flex;flex-direction:column;grid-column:2;grid-row:2/span 4;min-height:0;overflow:auto;border-left:1px solid var(--side-line);background:var(--w1);font-size:13px}
+.ocg-bar .ocg-h{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--side-line);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.ocg-bar .ocg-h b{flex:1;color:var(--ink)}
+.ocg-bar .ocg-h .sm{text-transform:none;letter-spacing:0}
+.ocg-bar label{display:flex;align-items:center;gap:8px;padding:6px 12px;color:var(--ink);cursor:pointer;overflow-wrap:anywhere}
+.ocg-bar label:hover{background:var(--w2)}
 .ocg-bar label.off{color:var(--muted);text-decoration:line-through}
+@media (max-width:720px){.pane.full.ocg-on{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) 35vh}.pane.full.ocg-on>.ocg-bar{grid-column:1;grid-row:3;border-left:0;border-top:1px solid var(--side-line)}}
 .excl-bar .chip{color:var(--danger);border-color:#e7b9b5;background:var(--danger-bg)}
 .excl-bar .chip:hover{border-color:var(--danger)}
 .man-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
@@ -428,7 +437,7 @@ body.noscroll{overflow:hidden}
         <div class="box-body">
           <div class="pane">
             <div class="pane-h"><b>Aperçu</b><span class="grow"></span>
-              <button class="sm ocg-btn" hidden title="Afficher ou masquer les calques du PDF">Calques</button>
+              <button class="sm ocg-btn" hidden title="Ouvrir le plan en plein écran pour geler ou dégeler ses calques">Geler les calques</button>
               <button class="sm excl-pick" title="Tracer sur le plan une zone à ne pas compter (partie de vue en double, cartouche…)">Exclure une zone</button>
               <button class="sm full-btn" title="Afficher le plan en plein écran (Échap pour quitter)">${FULL} Plein écran</button></div>
             <div class="view"><span class="msg">Chargement du plan…</span></div>
@@ -461,46 +470,48 @@ body.noscroll{overflow:hidden}
       const view=box.querySelector('.view');
       const api=isImg?showImg(r,view):showPdf(r,view,box.querySelector('.pager'));
       const legend=setupLegend(r,box,view,api);
-      setupFullscreen(box.querySelector('.pane'),box.querySelector('.full-btn'),api);
       box.querySelectorAll('.rot').forEach(b=>b.onclick=()=>{
         r.rot=(((r.rot||0)+Number(b.dataset.r))%360+360)%360;
         addPlan(r).catch(()=>{});api.redraw();legend.render();
       });
-      if(!isImg)setupLayers(r,box,api,legend);
+      const fs=setupFullscreen(box.querySelector('.pane'),box.querySelector('.full-btn'),api);
+      if(!isImg)setupLayers(r,box,api,legend,fs);
     });
   }
 
-  /* ---- Calques du PDF (contenu optionnel) : cocher / décocher pour afficher ou masquer.
-     Un calque masqué disparaît de l'aperçu et des analyses (légendes, surfaces). ---- */
-  async function setupLayers(r,box,api,legend){
-    const btn=box.querySelector('.ocg-btn'),bar=box.querySelector('.ocg-bar');
+  /* ---- Geler les calques du PDF (contenu optionnel) : le plan s'ouvre en plein écran avec la liste
+     des calques sur le côté ; décocher un calque le gèle. Un calque gelé disparaît de l'aperçu
+     et des analyses (légendes, surfaces). Choix mémorisé avec le plan (r.ocg). ---- */
+  async function setupLayers(r,box,api,legend,fs){
+    const btn=box.querySelector('.ocg-btn'),bar=box.querySelector('.ocg-bar'),pane=box.querySelector('.pane');
     const list=await api.layers().catch(()=>[]);
     if(!list.length||!box.isConnected)return;
     btn.hidden=false;
+    const apply=()=>{addPlan(r).catch(()=>{});api.redraw();legend.render();fill()};
     const fill=()=>{
       const L=api.layersNow(),off=L.filter(g=>!g.visible).length;
-      btn.textContent='Calques ('+(L.length-off)+'/'+L.length+')';
-      bar.innerHTML='<span>Calques :</span>';
+      btn.textContent='Geler les calques'+(off?' ('+off+' gelé'+(off>1?'s':'')+')':'');
+      bar.innerHTML=`<div class="ocg-h"><b>Calques (${L.length-off}/${L.length})</b></div>`;
+      if(off){const all=document.createElement('button');all.className='sm';all.textContent='Tout dégeler';
+        all.onclick=()=>{L.forEach(g=>api.setLayer(g.id,true));apply()};bar.firstChild.appendChild(all)}
       L.forEach(g=>{
         const lab=document.createElement('label');lab.className=g.visible?'':'off';lab.title=g.name;
         lab.innerHTML=`<input type="checkbox"${g.visible?' checked':''}> ${esc(g.name)}`;
-        lab.querySelector('input').onchange=e=>{api.setLayer(g.id,e.target.checked);addPlan(r).catch(()=>{});
-          api.redraw();legend.render();fill()};
+        lab.querySelector('input').onchange=e=>{api.setLayer(g.id,e.target.checked);apply()};
         bar.appendChild(lab);
       });
-      if(off){const all=document.createElement('button');all.className='sm';all.textContent='Tout afficher';
-        all.onclick=()=>{L.forEach(g=>api.setLayer(g.id,true));addPlan(r).catch(()=>{});api.redraw();legend.render();fill()};
-        bar.appendChild(all)}
     };
     fill();
-    btn.onclick=()=>{bar.hidden=!bar.hidden};
+    fs.onChange(on=>{if(!on)pane.classList.remove('ocg-on')});
+    btn.onclick=()=>{if(pane.classList.contains('ocg-on')){fs.set(false);return}
+      pane.classList.add('ocg-on');if(fs.on())requestAnimationFrame(()=>api.redraw());else fs.set(true)};
   }
 
   /* ---- Plein écran de l'aperçu : panneau étendu à toute la fenêtre (+ vrai plein écran si le navigateur l'autorise) ---- */
   function setupFullscreen(pane,btn,api){
-    let on=false;
+    let on=false,cbs=[];
     const set=v=>{
-      if(v===on)return;on=v;
+      if(v===on)return;on=v;cbs.forEach(f=>f(on));
       pane.classList.toggle('full',on);document.body.classList.toggle('noscroll',on);
       btn.innerHTML=on?`${EXIT} Quitter le plein écran`:`${FULL} Plein écran`;
       if(on){try{pane.requestFullscreen?.().catch(()=>{})}catch(e){}}
@@ -510,6 +521,7 @@ body.noscroll{overflow:hidden}
     btn.onclick=()=>set(!on);
     document.addEventListener('keydown',e=>{if(e.key==='Escape'&&on&&!pane.querySelector('.view.picking'))set(false)});
     document.addEventListener('fullscreenchange',()=>{if(on&&document.fullscreenElement!==pane)set(false)});
+    return {set,on:()=>on,onChange:f=>cbs.push(f)};
   }
 
   /* ---- Légende : zone du plan choisie par l'utilisateur, affichée agrandie à droite ----
