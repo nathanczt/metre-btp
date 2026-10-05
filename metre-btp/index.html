@@ -797,7 +797,8 @@ body.noscroll{overflow:hidden}
         li.innerHTML=`<input type="checkbox" class="pick"${on?' checked':''} aria-label="Sélectionner ce calque">
           <span class="sws"><span class="sw" style="background:rgb(${it.members[0].rgb.join(',')})"></span></span>
           <input class="nm" aria-label="Nom de la ligne" title="Nom de la ligne (modifiable) : par défaut, nom du calque"><span class="uq qty"></span>
-          <div class="prop"><span class="seg" role="group" aria-label="Type de mesure"><button data-k="m2" title="Surface des hachures et remplissages du calque">Surface</button><button data-k="ml" title="Longueur des traits du calque">Linéaire</button></span></div>`;
+          <div class="prop"><span class="seg" role="group" aria-label="Type de mesure"><button data-k="m2" title="Surface des hachures et remplissages du calque">Surface</button><button data-k="ml" title="Longueur des traits du calque">Linéaire</button></span>
+            <label class="ctr-l"${on?'':' hidden'}>Contraste <input type="range" class="ctr" min="-100" max="100" step="5" value="${(r.contrast||{})[it.key]||0}" title="Contraste de ce calque sur le plan (double-clic : réinitialiser)"></label></div>`;
         const nm=li.querySelector('.nm');nm.value=r.labels[it.key]??it.auto;
         nm.onchange=()=>{const v=nm.value.trim();if(v&&v!==it.auto)r.labels[it.key]=v;else{delete r.labels[it.key];nm.value=it.auto}addPlan(r).catch(()=>{});buildUse()};
         const qty=li.querySelector('.qty'),v=k==='m2'?it.q.m2:it.q.ml;
@@ -807,6 +808,11 @@ body.noscroll{overflow:hidden}
         const cbx=li.querySelector('.pick');
         cbx.onchange=()=>{r.selected=r.selected.filter(x=>x!==it.key);if(cbx.checked)r.selected.push(it.key);addPlan(r).catch(()=>{});api.redraw();buildUse()};
         li.querySelector('.sws').onclick=()=>{cbx.checked=!cbx.checked;cbx.onchange()};
+        // Contraste du calque sur l'aperçu : à droite il ressort (traits plus épais), à gauche il s'estompe
+        const ctr=li.querySelector('.ctr');let raf=0;
+        ctr.oninput=()=>{r.contrast=r.contrast||{};r.contrast[it.key]=Number(ctr.value);if(!raf)raf=requestAnimationFrame(()=>{raf=0;api.redraw()})};
+        ctr.onchange=()=>addPlan(r).catch(()=>{});
+        ctr.ondblclick=()=>{ctr.value=0;ctr.oninput();ctr.onchange()};
         useList.appendChild(li);
       });
       const n=rows.filter(it=>r.selected.includes(it.key)).length;
@@ -1548,7 +1554,7 @@ body.noscroll{overflow:hidden}
     try{return dwgToDrawing(L.convert(d))}finally{try{L.dwg_free(d)}catch(e){}}
   }
   /* Dessine le plan DWG dans un canvas : fenêtre win (fractions de la page) à maxPx pixels au plus */
-  function drawDwg(D,off,win,maxPx,hl){   // hl : calques mis en avant (les autres sont estompés)
+  function drawDwg(D,off,win,maxPx,hl){   // hl : Map calque → contraste (0,2…3) des calques mis en avant ; les autres sont estompés
     const [x0,y0,x1,y1]=D.box,pad=Math.max(x1-x0,y1-y0)*.02||1;
     const X0=x0-pad,Y1=y1+pad,PW=x1-x0+2*pad,PH=y1-y0+2*pad;   // page = emprise + 2 % de marge
     const w=win||{x:0,y:0,w:1,h:1};
@@ -1570,12 +1576,13 @@ body.noscroll{overflow:hidden}
     // remplissages d'abord, puis traits, puis textes
     for(const pass of ['f','s','t'])for(const it of D.items){
       if(it.k!==pass||off.has(it.l))continue;
-      g.globalAlpha=hl&&hl.size&&!hl.has(it.l)?.15:1;
+      let hf=1;g.globalAlpha=1;if(hl&&hl.size){if(hl.has(it.l)){hf=hl.get(it.l);g.globalAlpha=Math.min(1,hf)}else g.globalAlpha=.15}
+      const tw=Math.max(1,hf);   // contraste > 0 : traits plus épais
       if(pass==='f'){
         g.beginPath();it.p.forEach(p=>path(p,true));
         if(!it.pat){g.fillStyle=it.c;g.fill('evenodd');continue}
         // motif de hachures : lignes parallèles découpées par le contour
-        g.save();g.clip('evenodd');g.strokeStyle=ink(it.c);g.lineWidth=lw;
+        g.save();g.clip('evenodd');g.strokeStyle=ink(it.c);g.lineWidth=lw*tw;
         let bx0=Infinity,by0=Infinity,bx1=-Infinity,by1=-Infinity;
         it.p.forEach(p=>{for(let i=0;i<p.length;i+=2){bx0=Math.min(bx0,p[i]);bx1=Math.max(bx1,p[i]);by0=Math.min(by0,p[i+1]);by1=Math.max(by1,p[i+1])}});
         const diag=Math.hypot(bx1-bx0,by1-by0);let drawn=false;
@@ -1598,7 +1605,7 @@ body.noscroll{overflow:hidden}
         g.restore();continue;
       }
       if(pass==='s'){
-        g.beginPath();it.p.forEach(p=>path(p,it.z));g.strokeStyle=ink(it.c);g.lineWidth=Math.max(lw,(it.w||0)*k);g.lineJoin='round';g.stroke();continue;
+        g.beginPath();it.p.forEach(p=>path(p,it.z));g.strokeStyle=ink(it.c);g.lineWidth=Math.max(lw,(it.w||0)*k)*tw;g.lineJoin='round';g.stroke();continue;
       }
       const h=it.h*k;if(h<1.2)continue;
       const lines=it.s.split('\n'),lh=h*1.6,n=lines.length;
@@ -1646,7 +1653,9 @@ body.noscroll{overflow:hidden}
       const s=drawDwg(D,hidden(),{x:Math.min(a[0],b[0]),y:Math.min(a[1],b[1]),w:Math.abs(a[0]-b[0]),h:Math.abs(a[1]-b[1])},Math.max(pw,ph),hl());
       return rot?rotated(s.canvas,s.canvas.width,s.canvas.height,rot):s.canvas});
     const hidden=()=>{const o=r.ocg||{};return new Set(D.layers.map((L,i)=>(o[L.name]??L.on)?-1:i).filter(i=>i>=0))};
-    const hl=()=>{const S=new Set((r.selected||[]).filter(k=>k.startsWith('L:')).map(k=>k.slice(2)));return new Set(D.layers.map((L,i)=>S.has(L.name)?i:-1).filter(i=>i>=0))};
+    // calques cochés dans la légende automatique, avec leur contraste (curseur -100…+100 → 0,2…3)
+    const hl=()=>{const S=new Set((r.selected||[]).filter(k=>k.startsWith('L:')).map(k=>k.slice(2))),M=new Map();
+      D.layers.forEach((L,i)=>{if(!S.has(L.name))return;const v=(r.contrast||{})['L:'+L.name]||0;M.set(i,v>=0?1+v/50:1+v/125)});return M};
     const draw=()=>{const s=drawDwg(D,hidden(),null,3000,hl());pres.setRaw(r.rot?rotated(s.canvas,s.canvas.width,s.canvas.height,r.rot):s.canvas)};
     const list=()=>D.layers.map((L,i)=>({id:L.name,name:L.name,visible:(r.ocg||{})[L.name]??L.on,c:L.c})).filter((g,i)=>D.items.some(it=>it.l===i));
     setTimeout(()=>{try{draw()}catch(e){view.innerHTML='<span class="msg">Impossible d\'afficher ce DWG.</span>'}});
