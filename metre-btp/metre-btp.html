@@ -241,6 +241,8 @@ main p{color:var(--muted);margin:6px 0 0}
 .pane.full{position:fixed;inset:0;z-index:1000;background:var(--white);padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 .pane.full .view{flex:1;aspect-ratio:auto;width:100%;min-height:0}
 body.noscroll{overflow:hidden}
+.view.zoomed{cursor:grab}.view.panning{cursor:grabbing}
+.view .zoom-b{position:absolute;top:8px;right:8px;z-index:2;box-shadow:0 1px 4px rgba(28,37,48,.15)}
 .view.picking{cursor:crosshair;outline:2px solid var(--accent);outline-offset:-2px}
 .view.picking canvas,.view.picking img{pointer-events:none;user-select:none}
 .sel{position:absolute;border:2px solid var(--accent);background:rgba(36,71,168,.12);pointer-events:none}
@@ -485,7 +487,7 @@ body.noscroll{overflow:hidden}
               <button class="sm excl-pick" title="Tracer sur le plan une zone à ne pas compter (partie de vue en double, cartouche…)">Exclure une zone</button>
               <button class="sm full-btn" title="Afficher le plan en plein écran (Échap pour quitter)">${FULL} Plein écran</button></div>
             <div class="view"><span class="msg">Chargement du plan…</span></div>
-            <div class="pager" hidden><b></b><small>Molette sur le plan pour changer de page</small></div>
+            <div class="pager" hidden><button class="sm pg-prev" title="Page précédente">‹</button><b></b><button class="sm pg-next" title="Page suivante">›</button><small>Molette sur le plan : zoom</small></div>
             <div class="excl-bar" hidden></div>
             <div class="ocg-bar" hidden></div>
           </div>
@@ -1238,10 +1240,41 @@ body.noscroll{overflow:hidden}
   // Affiche l'aperçu filtré ; les mises à jour rapides (curseur) sont regroupées par image
   function presenter(view,label){
     let raw=null,filter=[],queued=false,overlay=null;
+    /* Zoom à la molette (autour du pointeur) et déplacement à la souris quand le plan est zoomé.
+       Le zoom est une transformation CSS du canvas : les clics sur le plan restent justes. */
+    const z={k:1,x:0,y:0,w:0,h:0},cb=[];
+    const applyZ=()=>{const c=view.querySelector('canvas,img');if(!c)return;
+      if(z.k>1&&(Math.abs(c.clientWidth-z.w)>2||Math.abs(c.clientHeight-z.h)>2)){z.k=1;z.x=z.y=0}   // encadré redimensionné : on recadre
+      c.style.transformOrigin='0 0';c.style.transform=z.k>1?`translate(${z.x}px,${z.y}px) scale(${z.k})`:'';
+      view.classList.toggle('zoomed',z.k>1);
+      let b=view.querySelector('.zoom-b');
+      if(z.k>1){if(!b){b=document.createElement('button');b.className='sm zoom-b';b.title='Revenir au plan entier (double-clic sur le plan)';
+          b.onpointerdown=e=>e.stopPropagation();b.onclick=e=>{e.stopPropagation();setZ(1)};view.appendChild(b)}
+        b.textContent=Math.round(z.k*100)+' % · Recadrer'}
+      else b?.remove()};
+    let zT;const setZ=(k,mx,my)=>{const c=view.querySelector('canvas,img');if(!c)return;
+      const w=c.clientWidth,h=c.clientHeight;k=Math.min(Math.max(k,1),20);
+      if(mx==null){mx=w/2;my=h/2}
+      z.x=mx-(mx-z.x)*k/z.k;z.y=my-(my-z.y)*k/z.k;z.k=k;
+      z.x=Math.min(0,Math.max(w*(1-k),z.x));z.y=Math.min(0,Math.max(h*(1-k),z.y));z.w=w;z.h=h;applyZ();
+      clearTimeout(zT);zT=setTimeout(()=>cb.forEach(f=>f(z.k)),250)};
+    view.addEventListener('wheel',e=>{const c=view.querySelector('canvas,img');if(!c)return;
+      e.preventDefault();const vr=view.getBoundingClientRect();
+      const d=e.deltaMode===1?e.deltaY*33:e.deltaMode===2?e.deltaY*400:e.deltaY;
+      setZ(z.k*Math.exp(-Math.max(-300,Math.min(300,d))*.0015),e.clientX-vr.left-c.offsetLeft,e.clientY-vr.top-c.offsetTop)},{passive:false});
+    view.addEventListener('pointerdown',e=>{
+      if(z.k<=1||e.button!==0||view.classList.contains('picking'))return;
+      e.preventDefault();view.setPointerCapture(e.pointerId);view.classList.add('panning');
+      const sx=e.clientX-z.x,sy=e.clientY-z.y;
+      const move=ev=>{z.x=ev.clientX-sx;z.y=ev.clientY-sy;setZ(z.k,0,0)};
+      const up=()=>{view.classList.remove('panning');view.removeEventListener('pointermove',move);view.removeEventListener('pointerup',up);view.removeEventListener('pointercancel',up)};
+      view.addEventListener('pointermove',move);view.addEventListener('pointerup',up);view.addEventListener('pointercancel',up)});
+    view.addEventListener('dblclick',()=>{if(!view.classList.contains('picking')&&z.k>1)setZ(1)});
     const show=()=>{queued=false;if(!raw)return;
-      if(raw.width&&raw.height)view.style.setProperty('--ar',(raw.width+20)/(raw.height+20));   // + marge intérieure de 10 px
-      const cv=highlight(raw,filter);if(overlay)overlay(cv);cv.setAttribute('aria-label',label);view.innerHTML='';view.appendChild(cv)};
+      if(raw.width&&raw.height&&z.k===1)view.style.setProperty('--ar',(raw.width+20)/(raw.height+20));   // + marge intérieure de 10 px (inchangé pendant un zoom)
+      const cv=highlight(raw,filter);if(overlay)overlay(cv);cv.setAttribute('aria-label',label);view.innerHTML='';view.appendChild(cv);applyZ()};
     return {
+      zoom:()=>z.k,onZoom:f=>cb.push(f),
       setRaw:c=>{raw=c;show()},
       setOverlay:f=>{overlay=f;show()},
       setFilter:cols=>{const s=JSON.stringify(cols);if(s===JSON.stringify(filter))return;filter=cols;
@@ -1500,9 +1533,10 @@ body.noscroll{overflow:hidden}
   function showDwg(r,view){
     const pres=presenter(view,r.name),D=r.dwg;
     const hidden=()=>{const o=r.ocg||{};return new Set(D.layers.map((L,i)=>(o[L.name]??L.on)?-1:i).filter(i=>i>=0))};
-    const draw=()=>{const s=drawDwg(D,hidden(),null,3000);pres.setRaw(r.rot?rotated(s.canvas,s.canvas.width,s.canvas.height,r.rot):s.canvas)};
+    const draw=()=>{const s=drawDwg(D,hidden(),null,Math.min(3000*pres.zoom(),8000));pres.setRaw(r.rot?rotated(s.canvas,s.canvas.width,s.canvas.height,r.rot):s.canvas)};
     const list=()=>D.layers.map((L,i)=>({id:L.name,name:L.name,visible:(r.ocg||{})[L.name]??L.on,c:L.c})).filter((g,i)=>D.items.some(it=>it.l===i));
     setTimeout(()=>{try{draw()}catch(e){view.innerHTML='<span class="msg">Impossible d\'afficher ce DWG.</span>'}});
+    let zk=1;pres.onZoom(k=>{const q=Math.min(k,8000/3000);if(Math.abs(q-zk)>.3||(q===1)!==(zk===1)){zk=q;try{draw()}catch(e){}}});
     return {redraw:draw,page:()=>1,pages:()=>1,setFilter:pres.setFilter,setOverlay:pres.setOverlay,
       crop:async rect=>{const s=drawDwg(D,hidden(),rect,1600);return r.rot?rotated(s.canvas,s.canvas.width,s.canvas.height,r.rot):s.canvas},
       source:async()=>drawDwg(D,hidden(),null,1500),
@@ -1567,7 +1601,7 @@ body.noscroll{overflow:hidden}
         const base=page.getViewport({scale:1,rotation});
         const dpr=window.devicePixelRatio||1;
         const fit=Math.min((view.clientWidth||600)/base.width,(view.clientHeight||420)/base.height);
-        const scale=Math.min(fit*dpr*1.5,3000/Math.max(base.width,base.height));
+        const zk=pres.zoom(),scale=Math.min(fit*dpr*1.5*zk,zk>1?Math.sqrt(36e6/(base.width*base.height)):3000/Math.max(base.width,base.height));   // zoomé : rendu plus fin (36 Mpx au plus)
         const vp=page.getViewport({scale,rotation});
         const cv=document.createElement('canvas');cv.width=vp.width;cv.height=vp.height;
         await rnd(page,cv.getContext('2d'),vp);
@@ -1580,18 +1614,10 @@ body.noscroll{overflow:hidden}
         if(Math.abs(w*h-lastW)/Math.max(lastW,1)<.15)return;lastW=w*h;clearTimeout(rT);rT=setTimeout(()=>draw(),150)}).observe(view);
       pager.hidden=doc.numPages<2;
       if(doc.numPages>1){
-        let acc=0,last=0;
-        view.addEventListener('wheel',e=>{
-          const dir=Math.sign(e.deltaY);if(!dir)return;
-          const k=n+dir;
-          if(k<1||k>doc.numPages){acc=0;return}      // en bout de document : la page défile normalement
-          e.preventDefault();
-          acc+=e.deltaMode===1?e.deltaY*33:e.deltaY; // lignes → pixels
-          const now=Date.now();
-          if(Math.abs(acc)<60||now-last<180)return;  // un cran de molette = une page, pavé tactile amorti
-          acc=0;last=now;n=k;draw();
-        },{passive:false});
+        const go=d=>{const k=n+d;if(k<1||k>doc.numPages)return;n=k;draw()};
+        pager.querySelector('.pg-prev').onclick=()=>go(-1);pager.querySelector('.pg-next').onclick=()=>go(1);
       }
+      let zq=1;pres.onZoom(k=>{if(Math.abs(k-zq)/zq>.25||(k===1)!==(zq===1)){zq=k;draw()}});
       await draw();
     }catch(e){view.innerHTML='<span class="msg">Impossible d\'afficher ce PDF.</span>'}})();
     return api;
