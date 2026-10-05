@@ -133,6 +133,11 @@ main p{color:var(--muted);margin:6px 0 0}
 .struct-list .uq{font-size:12.5px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
 .excl-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:8px 12px;border-top:1px solid var(--side-line);font-size:12.5px;color:var(--muted)}
 .excl-bar[hidden]{display:none}
+/* Calques du PDF : cases à cocher sous l'aperçu */
+.ocg-bar{display:flex;align-items:center;gap:6px 14px;flex-wrap:wrap;padding:8px 12px;border-top:1px solid var(--side-line);font-size:12.5px;color:var(--muted);max-height:30vh;overflow:auto}
+.ocg-bar[hidden],.ocg-btn[hidden]{display:none}
+.ocg-bar label{display:inline-flex;align-items:center;gap:5px;color:var(--ink);cursor:pointer}
+.ocg-bar label.off{color:var(--muted);text-decoration:line-through}
 .excl-bar .chip{color:var(--danger);border-color:#e7b9b5;background:var(--danger-bg)}
 .excl-bar .chip:hover{border-color:var(--danger)}
 .man-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
@@ -423,11 +428,13 @@ body.noscroll{overflow:hidden}
         <div class="box-body">
           <div class="pane">
             <div class="pane-h"><b>Aperçu</b><span class="grow"></span>
+              <button class="sm ocg-btn" hidden title="Afficher ou masquer les calques du PDF">Calques</button>
               <button class="sm excl-pick" title="Tracer sur le plan une zone à ne pas compter (partie de vue en double, cartouche…)">Exclure une zone</button>
               <button class="sm full-btn" title="Afficher le plan en plein écran (Échap pour quitter)">${FULL} Plein écran</button></div>
             <div class="view"><span class="msg">Chargement du plan…</span></div>
             <div class="pager" hidden><b></b><small>Molette sur le plan pour changer de page</small></div>
             <div class="excl-bar" hidden></div>
+            <div class="ocg-bar" hidden></div>
           </div>
           <div class="pane legend">
             <div class="pane-h"><b>Légende manuelle</b><span class="leg-page"></span>
@@ -459,7 +466,34 @@ body.noscroll{overflow:hidden}
         r.rot=(((r.rot||0)+Number(b.dataset.r))%360+360)%360;
         addPlan(r).catch(()=>{});api.redraw();legend.render();
       });
+      if(!isImg)setupLayers(r,box,api,legend);
     });
+  }
+
+  /* ---- Calques du PDF (contenu optionnel) : cocher / décocher pour afficher ou masquer.
+     Un calque masqué disparaît de l'aperçu et des analyses (légendes, surfaces). ---- */
+  async function setupLayers(r,box,api,legend){
+    const btn=box.querySelector('.ocg-btn'),bar=box.querySelector('.ocg-bar');
+    const list=await api.layers().catch(()=>[]);
+    if(!list.length||!box.isConnected)return;
+    btn.hidden=false;
+    const fill=()=>{
+      const L=api.layersNow(),off=L.filter(g=>!g.visible).length;
+      btn.textContent='Calques ('+(L.length-off)+'/'+L.length+')';
+      bar.innerHTML='<span>Calques :</span>';
+      L.forEach(g=>{
+        const lab=document.createElement('label');lab.className=g.visible?'':'off';lab.title=g.name;
+        lab.innerHTML=`<input type="checkbox"${g.visible?' checked':''}> ${esc(g.name)}`;
+        lab.querySelector('input').onchange=e=>{api.setLayer(g.id,e.target.checked);addPlan(r).catch(()=>{});
+          api.redraw();legend.render();fill()};
+        bar.appendChild(lab);
+      });
+      if(off){const all=document.createElement('button');all.className='sm';all.textContent='Tout afficher';
+        all.onclick=()=>{L.forEach(g=>api.setLayer(g.id,true));addPlan(r).catch(()=>{});api.redraw();legend.render();fill()};
+        bar.appendChild(all)}
+    };
+    fill();
+    btn.onclick=()=>{bar.hidden=!bar.hidden};
   }
 
   /* ---- Plein écran de l'aperçu : panneau étendu à toute la fenêtre (+ vrai plein écran si le navigateur l'autorise) ---- */
@@ -1165,7 +1199,14 @@ body.noscroll{overflow:hidden}
         cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);return {canvas:cv,texts:[]}}};
   }
   function showPdf(r,view,pager){
-    let draw=()=>{},n=1,doc=null,docP;const pres=presenter(view,r.name);
+    let draw=()=>{},n=1,doc=null,docP,ocP,oc=null;const pres=presenter(view,r.name);
+    // Calques : r.ocg = {id du calque: visible} ne garde que les choix faits à la main
+    const ocList=()=>{const G=oc?.getGroups?.();if(!G)return [];
+      const ids=(oc.getOrder?.()||[]).flat(Infinity).map(o=>typeof o==='string'?o:null).filter(id=>id&&G[id]);
+      const all=[...new Set([...ids,...Object.keys(G)])];
+      return all.map(id=>({id,name:G[id].name||'(sans nom)',visible:G[id].visible!==false}))};
+    const rnd=async(page,ctx,vp)=>{await ocP;
+      return page.render(oc?{canvasContext:ctx,viewport:vp,optionalContentConfigPromise:Promise.resolve(oc)}:{canvasContext:ctx,viewport:vp}).promise};
     const api={redraw:()=>draw(),page:()=>n,pages:()=>doc?doc.numPages:1,setFilter:pres.setFilter,setOverlay:pres.setOverlay,
       crop:async rect=>{
         const d=await docP;const page=await d.getPage(Math.min(rect.page||1,d.numPages));
@@ -1173,7 +1214,7 @@ body.noscroll{overflow:hidden}
         const scale=Math.min(1600/Math.max(rect.w*base.width,rect.h*base.height,1),Math.sqrt(16e6/(base.width*base.height)));
         const vp=page.getViewport({scale,rotation});
         const cv=document.createElement('canvas');cv.width=vp.width;cv.height=vp.height;
-        await page.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise;
+        await rnd(page,cv.getContext('2d'),vp);
         return cropTo(cv,cv.width,cv.height,rect,r.rot||0);
       },
       // Page non pivotée pour l'analyse : image + textes (positions en fractions de page)
@@ -1182,7 +1223,7 @@ body.noscroll{overflow:hidden}
         const rotation=page.rotate||0;const base=page.getViewport({scale:1,rotation});
         const vp=page.getViewport({scale:Math.min(1500/Math.max(base.width,base.height),4),rotation});
         const cv=document.createElement('canvas');cv.width=Math.round(vp.width);cv.height=Math.round(vp.height);
-        await page.render({canvasContext:cv.getContext('2d',{willReadFrequently:true}),viewport:vp}).promise;
+        await rnd(page,cv.getContext('2d',{willReadFrequently:true}),vp);
         let texts=[];
         try{
           const tc=await page.getTextContent();
@@ -1194,11 +1235,17 @@ body.noscroll{overflow:hidden}
           }).filter(Boolean);
         }catch(e){}
         return {canvas:cv,texts,ptPerPx:1/vp.scale};
-      }};
+      },
+      layers:async()=>{await ocP;return ocList()},
+      layersNow:ocList,
+      setLayer:(id,v)=>{if(!oc)return;oc.setVisibility(id,v);(r.ocg=r.ocg||{})[id]=v}};
     if(!window.pdfjsLib){view.innerHTML='<span class="msg">Aperçu PDF indisponible (lecteur PDF non chargé).</span>';docP=Promise.reject(new Error('pdf'));docP.catch(()=>{});return api}
     pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     docP=r.blob.arrayBuffer().then(b=>pdfjsLib.getDocument({data:new Uint8Array(b)}).promise);
     docP.catch(()=>{});
+    ocP=docP.then(d=>d.getOptionalContentConfig()).then(c=>{oc=c;
+      const G=c?.getGroups?.()||{};for(const[id,v]of Object.entries(r.ocg||{}))if(G[id])c.setVisibility(id,v);
+      return c}).catch(()=>null);
     (async()=>{try{
       doc=await docP;
       let tok=0;const label=pager.querySelector('b');
@@ -1212,7 +1259,7 @@ body.noscroll{overflow:hidden}
         const scale=Math.min(fit*dpr*1.5,3000/Math.max(base.width,base.height));
         const vp=page.getViewport({scale,rotation});
         const cv=document.createElement('canvas');cv.width=vp.width;cv.height=vp.height;
-        await page.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise;
+        await rnd(page,cv.getContext('2d'),vp);
         if(my!==tok)return;
         pres.setRaw(cv);
         api.onPage?.();
