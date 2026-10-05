@@ -94,7 +94,7 @@ main p{color:var(--muted);margin:6px 0 0}
 .box-body{display:grid;grid-template-columns:minmax(0,1fr)}   /* aperçu sur toute la largeur, légende dessous */
 .pane{display:flex;flex-direction:column;min-width:0}
 .pane.legend{border-top:1px solid var(--side-line)}
-.leg-view .recap{display:none}   /* récapitulatif masqué : la sélection se fait dans « Légende à utiliser » */
+.leg-view .recap{display:none}   /* récapitulatif masqué : la sélection se fait dans « Légende automatique » */
 .pane-h{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--side-line);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);min-height:41px}
 .pane-h b{font-weight:700;color:var(--ink)}
 .pane-h .leg-page{flex:1;text-transform:none;letter-spacing:0;font-size:12px}
@@ -421,13 +421,13 @@ body.noscroll{overflow:hidden}
             <div class="excl-bar" hidden></div>
           </div>
           <div class="pane legend">
-            <div class="pane-h"><b>Légende</b><span class="leg-page"></span>
+            <div class="pane-h"><b>Légende manuelle</b><span class="leg-page"></span>
               <button class="sm leg-pick"></button><button class="sm leg-clear" hidden>Effacer</button></div>
             <div class="leg-view"></div>
           </div>
         </div>
         <div class="use-leg">
-          <div class="pane-h"><b>Légende à utiliser</b><span class="leg2-page"></span><span class="grow"></span>
+          <div class="pane-h"><b>Légende automatique</b><span class="leg2-page"></span><span class="grow"></span>
             <span class="leg2-state"></span>
             <button class="sm leg2-ok primary-sm" hidden title="Utiliser cette légende pour nommer le récapitulatif">Valider</button>
             <button class="sm leg2-pick"></button><button class="sm leg2-clear" hidden>Effacer</button></div>
@@ -487,10 +487,10 @@ body.noscroll{overflow:hidden}
     // Deux zones tracées sur le plan : la zone de légende (en-tête du panneau Légende)
     // et la « légende à utiliser » (encadré sous le plan), prioritaire pour nommer les lignes.
     const zones={
-      legend:{btn:pick,clr:clear,cb,lp,tok:0,label:'Légende du plan',
+      legend:{btn:pick,clr:clear,cb,lp,tok:0,label:'Légende manuelle',
         pickMsg:'Tracez un rectangle autour de la légende sur l\'aperçu à gauche.',
         none:'Aucune zone de légende. Cliquez sur « Sélectionner sur le plan », puis tracez un rectangle autour de la légende : les couleurs du récapitulatif prendront les noms de la légende.'},
-      legend2:{btn:pick2,clr:clear2,cb:box.querySelector('.use-crop'),lp:box.querySelector('.leg2-page'),tok:0,label:'Légende à utiliser',
+      legend2:{btn:pick2,clr:clear2,cb:box.querySelector('.use-crop'),lp:box.querySelector('.leg2-page'),tok:0,label:'Légende automatique',
         pickMsg:'Tracez un rectangle autour de la légende à utiliser sur l\'aperçu.',
         none:'Aucune légende choisie. Cliquez sur « Sélectionner sur le plan », puis tracez un rectangle autour de la légende à utiliser : puis cliquez sur « Valider » : ses libellés serviront en priorité à nommer les lignes du récapitulatif.'}
     };
@@ -560,7 +560,7 @@ body.noscroll{overflow:hidden}
     const numFr=v=>{const n=parseFloat(String(v).replace(',','.'));return isFinite(n)&&n>0?n:null};
     function buildStruct(rows){
       stRows=rows;stList.innerHTML='';stInfo.textContent=rows&&rows.length?rows.length+(rows.length>1?' zones':' zone'):'';
-      if(!rows||!rows.length){stList.innerHTML=`<li class="msg">${rows?'Aucune zone de la légende retrouvée sur cette page du plan.':'Validez une « Légende à utiliser » pour reprendre ici les différentes zones.'}</li>`;return}
+      if(!rows||!rows.length){stList.innerHTML=`<li class="msg">${rows?'Aucune zone de la légende retrouvée sur cette page du plan.':'Validez une « Légende automatique » pour reprendre ici les différentes zones.'}</li>`;return}
       r.layers=r.layers||{};
       rows.forEach(it=>{
         const li=document.createElement('li'),L=r.layers[it.key]||[];
