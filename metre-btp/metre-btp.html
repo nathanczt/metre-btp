@@ -227,6 +227,8 @@ main p{color:var(--muted);margin:6px 0 0}
 .leg2-state{text-transform:none;letter-spacing:0;font-size:12px;font-weight:600}
 .leg2-state.wait{color:var(--gold)}
 .leg2-state.ok{color:#1f7a3d}
+.use-leg.dwg .use-crop,.use-leg.dwg .leg2-pick,.use-leg.dwg .leg2-clear,.use-leg.dwg .leg2-ok,.use-leg.dwg .leg2-state,.use-leg.dwg .leg2-page,.use-leg.dwg .sel-bar .mk{display:none!important}
+.use-leg.dwg .use-sel{border-left:0;padding-left:0;width:100%}
 .use-body{background:var(--white);padding:12px 14px;min-height:90px;display:flex;justify-content:center;align-items:center}
 .use-crop{display:flex;justify-content:center;align-items:center;min-width:0}
 .use-body.split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:start}
@@ -520,6 +522,7 @@ body.noscroll{overflow:hidden}
           <div class="pane-h"><b>Structure</b><span class="grow"></span><span class="struct-info"></span></div>
           <ul class="struct-list"></ul>
         </div>`;
+      if(dwg)box.querySelector('.use-leg').classList.add('dwg');
       ['.pane.legend','.use-leg','.struct'].forEach(q=>addFold(box.querySelector(q),q.replace(/\W/g,'')));
       box.querySelector('.del').onclick=async()=>{await delPlan(r.id).catch(()=>{});renderPlans()};
       plansEl.appendChild(box);
@@ -734,11 +737,11 @@ body.noscroll{overflow:hidden}
     const stList=box.querySelector('.struct-list'),stInfo=box.querySelector('.struct-info');
     /* Couches par zone (r.layers[clé de ligne] = [{name, ep en cm}]) : volume = surface × épaisseur */
     let stRows=null;
-    const areaM2=it=>{const mpp=mPerPx();return mpp?it.members.reduce((s,c)=>s+(c.area||0),0)*mpp*mpp:null};
+    const areaM2=it=>{if(it.m2!=null)return it.m2;const mpp=mPerPx();return mpp?it.members.reduce((s,c)=>s+(c.area||0),0)*mpp*mpp:null};
     const numFr=v=>{const n=parseFloat(String(v).replace(',','.'));return isFinite(n)&&n>0?n:null};
     function buildStruct(rows){
       stRows=rows;stList.innerHTML='';stInfo.textContent=rows&&rows.length?rows.length+(rows.length>1?' zones':' zone'):'';
-      if(!rows||!rows.length){stList.innerHTML=`<li class="msg">${rows?'Aucune zone de la légende retrouvée sur cette page du plan.':'Validez une « Légende automatique » pour reprendre ici les différentes zones.'}</li>`;return}
+      if(!rows||!rows.length){stList.innerHTML=`<li class="msg">${rows?(r.dwg?'Aucun calque actif avec un dessin.':'Aucune zone de la légende retrouvée sur cette page du plan.'):'Validez une « Légende automatique » pour reprendre ici les différentes zones.'}</li>`;return}
       r.layers=r.layers||{};
       rows.forEach(it=>{
         const li=document.createElement('li'),L=r.layers[it.key]||[];
@@ -775,8 +778,44 @@ body.noscroll{overflow:hidden}
         stList.appendChild(li);
       });
     }
+    /* DWG : une ligne par calque actif (non gelé) ayant un dessin ; quantités lues dans le dessin.
+       Clé « L:nom du calque » ; cocher une ligne met le calque en avant sur l'aperçu. */
+    let dwgQ={k:null,Q:null};
+    function buildUseDwg(){
+      useBody.classList.remove('split');useSel.hidden=false;
+      const D=r.dwg,qk=JSON.stringify(r.excl||[]);if(dwgQ.k!==qk)dwgQ={k:qk,Q:dwgQuantities(D,r.excl)};const Q=dwgQ.Q,act=new Set(api.layersNow().filter(g=>g.visible).map(g=>g.name));
+      r.labels=r.labels||{};r.selected=r.selected||[];r.measure=r.measure||{};
+      const rows=D.layers.map((L,i)=>({L,i,q:Q.get(i)})).filter(o=>o.q&&act.has(o.L.name)&&(o.q.m2>0||o.q.ml>0)).map(({L,q})=>{
+        const key='L:'+L.name,auto=L.name;
+        const lab=norm(r.labels[key]??auto),def=LIN.test(lab)?'ml':SURF.test(lab)?'m2':q.fill>0?'m2':'ml';
+        return {key,auto,q,def,m2:q.m2,members:[{rgb:cssRgb(L.c),key}]}});
+      useList.innerHTML='';
+      if(!rows.length){useInfo.textContent='';useList.innerHTML='<li class="msg">Aucun calque actif avec un dessin. Dégelez des calques dans la liste « Calques ».</li>';useMerge.hidden=true;buildStruct([]);return}
+      rows.forEach(it=>{
+        const on=r.selected.includes(it.key),li=document.createElement('li');li.className=on?'on':'';it.li=li;
+        const k=r.measure[it.key]||it.def;
+        li.innerHTML=`<input type="checkbox" class="pick"${on?' checked':''} aria-label="Sélectionner ce calque">
+          <span class="sws"><span class="sw" style="background:rgb(${it.members[0].rgb.join(',')})"></span></span>
+          <input class="nm" aria-label="Nom de la ligne" title="Nom de la ligne (modifiable) : par défaut, nom du calque"><span class="uq qty"></span>
+          <div class="prop"><span class="seg" role="group" aria-label="Type de mesure"><button data-k="m2" title="Surface des hachures et remplissages du calque">Surface</button><button data-k="ml" title="Longueur des traits du calque">Linéaire</button></span></div>`;
+        const nm=li.querySelector('.nm');nm.value=r.labels[it.key]??it.auto;
+        nm.onchange=()=>{const v=nm.value.trim();if(v&&v!==it.auto)r.labels[it.key]=v;else{delete r.labels[it.key];nm.value=it.auto}addPlan(r).catch(()=>{});buildUse()};
+        const qty=li.querySelector('.qty'),v=k==='m2'?it.q.m2:it.q.ml;
+        qty.textContent=v>0?'≈ '+fmt(v,v<1?3:v<10?2:1)+(k==='m2'?' m²':' ml'):k==='m2'?'pas de surface':'pas de trait';
+        li.querySelectorAll('.seg button').forEach(b=>{b.classList.toggle('on',b.dataset.k===k);
+          b.onclick=()=>{if(b.dataset.k===it.def)delete r.measure[it.key];else r.measure[it.key]=b.dataset.k;addPlan(r).catch(()=>{});buildUse()}});
+        const cbx=li.querySelector('.pick');
+        cbx.onchange=()=>{r.selected=r.selected.filter(x=>x!==it.key);if(cbx.checked)r.selected.push(it.key);addPlan(r).catch(()=>{});api.redraw();buildUse()};
+        li.querySelector('.sws').onclick=()=>{cbx.checked=!cbx.checked;cbx.onchange()};
+        useList.appendChild(li);
+      });
+      const n=rows.filter(it=>r.selected.includes(it.key)).length;
+      useInfo.textContent=rows.length+(rows.length>1?' calques actifs':' calque actif')+(n?' · '+n+' sélectionné'+(n>1?'s':''):'');
+      useMerge.hidden=true;buildStruct(rows);
+    }
     function buildUse(){
       if(holdUse)return;
+      if(r.dwg){buildUseDwg();return}
       const on=!picking&&!!(r.legend2&&r.legend2.ok);
       useBody.classList.toggle('split',on);useSel.hidden=!on;if(!on){buildStruct(null);return}
       const tagged=found.filter(c=>c.legendTag==='use').sort((a,b)=>a.legendPos[0]-b.legendPos[0]||a.legendPos[1]-b.legendPos[1]);
@@ -1509,7 +1548,7 @@ body.noscroll{overflow:hidden}
     try{return dwgToDrawing(L.convert(d))}finally{try{L.dwg_free(d)}catch(e){}}
   }
   /* Dessine le plan DWG dans un canvas : fenêtre win (fractions de la page) à maxPx pixels au plus */
-  function drawDwg(D,off,win,maxPx){
+  function drawDwg(D,off,win,maxPx,hl){   // hl : calques mis en avant (les autres sont estompés)
     const [x0,y0,x1,y1]=D.box,pad=Math.max(x1-x0,y1-y0)*.02||1;
     const X0=x0-pad,Y1=y1+pad,PW=x1-x0+2*pad,PH=y1-y0+2*pad;   // page = emprise + 2 % de marge
     const w=win||{x:0,y:0,w:1,h:1};
@@ -1531,6 +1570,7 @@ body.noscroll{overflow:hidden}
     // remplissages d'abord, puis traits, puis textes
     for(const pass of ['f','s','t'])for(const it of D.items){
       if(it.k!==pass||off.has(it.l))continue;
+      g.globalAlpha=hl&&hl.size&&!hl.has(it.l)?.15:1;
       if(pass==='f'){
         g.beginPath();it.p.forEach(p=>path(p,true));
         if(!it.pat){g.fillStyle=it.c;g.fill('evenodd');continue}
@@ -1554,7 +1594,7 @@ body.noscroll{overflow:hidden}
           g.stroke();
         }
         g.setLineDash([]);
-        if(!drawn){g.globalAlpha=.35;g.fillStyle=it.c;g.fill('evenodd')}
+        if(!drawn){g.globalAlpha*=.35;g.fillStyle=it.c;g.fill('evenodd')}
         g.restore();continue;
       }
       if(pass==='s'){
@@ -1574,15 +1614,40 @@ body.noscroll{overflow:hidden}
         texts.push({s,x:Math.min(tx,tx+dir*wpx)/cv.width,y:Math.min(ty,ty+dir*h)/cv.height,w:wpx/cv.width,h:h/cv.height})});
       g.restore();
     }
+    g.globalAlpha=1;
     return {canvas:cv,texts,mPerPx:D.m/k};
+  }
+  const cssRgb=c=>{const g=document.createElement('canvas').getContext('2d');g.fillStyle='#000';g.fillStyle=c;const h=g.fillStyle,m=/^#(..)(..)(..)$/.exec(h);
+    return m?[1,2,3].map(i=>parseInt(m[i],16)):(h.match(/\d+/g)||[0,0,0]).slice(0,3).map(Number)};
+  /* Quantités d'un DWG par calque, en vraie grandeur (D.m mètres par unité) :
+     surface = hachures et remplissages (sinon contours fermés), longueur = traits.
+     Les objets dont le centre tombe dans une zone exclue ne sont pas comptés. */
+  function dwgQuantities(D,excl){
+    const [x0,y0,x1,y1]=D.box,pad=Math.max(x1-x0,y1-y0)*.02||1,X0=x0-pad,Y1=y1+pad,PW=x1-x0+2*pad,PH=y1-y0+2*pad;
+    const ex=(excl||[]).map(e=>[X0+e.x*PW,Y1-(e.y+e.h)*PH,X0+(e.x+e.w)*PW,Y1-e.y*PH]);
+    const ring=p=>{let a=0;const n=p.length;for(let i=0;i<n;i+=2){const j=(i+2)%n;a+=p[i]*p[j+1]-p[j]*p[i+1]}return Math.abs(a)/2};
+    const len=(p,z)=>{let l=0;for(let i=2;i<p.length;i+=2)l+=Math.hypot(p[i]-p[i-2],p[i+1]-p[i-1]);if(z&&p.length>=4)l+=Math.hypot(p[0]-p[p.length-2],p[1]-p[p.length-1]);return l};
+    const Q=new Map(),m=D.m,get=l=>{if(!Q.has(l))Q.set(l,{fill:0,closed:0,len:0});return Q.get(l)};
+    for(const it of D.items){
+      if(it.k==='t')continue;
+      let a=Infinity,b=Infinity,c=-Infinity,d=-Infinity;
+      for(const p of it.p)for(let i=0;i<p.length;i+=2){if(p[i]<a)a=p[i];if(p[i]>c)c=p[i];if(p[i+1]<b)b=p[i+1];if(p[i+1]>d)d=p[i+1]}
+      const cx=(a+c)/2,cy=(b+d)/2;if(ex.some(e=>cx>=e[0]&&cx<=e[2]&&cy>=e[1]&&cy<=e[3]))continue;
+      const q=get(it.l);
+      if(it.k==='f'){const A=it.p.map(ring).sort((u,v)=>v-u);q.fill+=A.length>1?Math.max(0,A[0]-A.slice(1).reduce((u,v)=>u+v,0)):A[0]}
+      else{for(const p of it.p){q.len+=len(p,it.z);if(it.z)q.closed+=ring(p)}}
+    }
+    for(const q of Q.values()){q.m2=(q.fill||q.closed)*m*m;q.ml=q.len*m}
+    return Q;
   }
   function showDwg(r,view){
     const D=r.dwg;
     const pres=presenter(view,r.name,async(win,pw,ph)=>{const rot=r.rot||0,a=toUnrot(win.x,win.y,rot),b=toUnrot(win.x+win.w,win.y+win.h,rot);
-      const s=drawDwg(D,hidden(),{x:Math.min(a[0],b[0]),y:Math.min(a[1],b[1]),w:Math.abs(a[0]-b[0]),h:Math.abs(a[1]-b[1])},Math.max(pw,ph));
+      const s=drawDwg(D,hidden(),{x:Math.min(a[0],b[0]),y:Math.min(a[1],b[1]),w:Math.abs(a[0]-b[0]),h:Math.abs(a[1]-b[1])},Math.max(pw,ph),hl());
       return rot?rotated(s.canvas,s.canvas.width,s.canvas.height,rot):s.canvas});
     const hidden=()=>{const o=r.ocg||{};return new Set(D.layers.map((L,i)=>(o[L.name]??L.on)?-1:i).filter(i=>i>=0))};
-    const draw=()=>{const s=drawDwg(D,hidden(),null,3000);pres.setRaw(r.rot?rotated(s.canvas,s.canvas.width,s.canvas.height,r.rot):s.canvas)};
+    const hl=()=>{const S=new Set((r.selected||[]).filter(k=>k.startsWith('L:')).map(k=>k.slice(2)));return new Set(D.layers.map((L,i)=>S.has(L.name)?i:-1).filter(i=>i>=0))};
+    const draw=()=>{const s=drawDwg(D,hidden(),null,3000,hl());pres.setRaw(r.rot?rotated(s.canvas,s.canvas.width,s.canvas.height,r.rot):s.canvas)};
     const list=()=>D.layers.map((L,i)=>({id:L.name,name:L.name,visible:(r.ocg||{})[L.name]??L.on,c:L.c})).filter((g,i)=>D.items.some(it=>it.l===i));
     setTimeout(()=>{try{draw()}catch(e){view.innerHTML='<span class="msg">Impossible d\'afficher ce DWG.</span>'}});
     return {redraw:draw,page:()=>1,pages:()=>1,setFilter:pres.setFilter,setOverlay:pres.setOverlay,
