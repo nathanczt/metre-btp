@@ -33,8 +33,13 @@ button,input{font:inherit;color:inherit}
 .rail span{writing-mode:vertical-rl;transform:rotate(180deg);font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase}
 .rail:hover{color:var(--accent)}
 .app.has-p.folded .side1{padding-block:14px}
-.app.has-p.folded .side1 > :not(.rail){display:none}
-.app.has-p.folded .rail{display:flex}
+.app.has-p.folded .side1 > :not(.rail):not(.rail-sync){display:none}
+.app.has-p.folded .rail{display:flex;flex:1;height:auto}
+.rail-sync{display:none;justify-content:center;background:none;border:0;cursor:pointer;color:var(--side-muted);padding:8px 0;width:100%}
+.rail-sync svg{width:18px;height:18px}
+.rail-sync:hover{color:var(--accent)}
+.rail-sync.on{color:#2e7d4f}.rail-sync.bad{color:var(--danger)}
+.app.has-p.folded .rail-sync{display:flex}
 .list .ren:hover{color:var(--accent);background:var(--w2)}
 .list li.editing{background:var(--white);box-shadow:inset 3px 0 0 var(--accent);padding:4px}
 .list li.editing input{flex:1;min-width:0;border:1px solid var(--accent);border-radius:4px;padding:6px 8px;background:var(--white);outline:none}
@@ -86,6 +91,24 @@ main p{color:var(--muted);margin:6px 0 0}
 .drop b{color:var(--ink);font-size:15px}
 .drop.over b{color:var(--accent)}
 .err{color:var(--danger);font-size:13px;margin-top:8px}
+/* Synchronisation en ligne */
+.sync{margin-top:auto;padding:12px 16px 0}
+.sync-btn{display:flex;align-items:center;gap:8px;width:100%;background:none;border:1px dashed var(--side-line);border-radius:5px;padding:8px 10px;color:var(--side-muted);font-size:12.5px;cursor:pointer;text-align:left}
+.sync-btn svg{flex:none;width:16px;height:16px}
+.sync-btn:hover{border-color:var(--accent);color:var(--accent)}
+.sync-btn.on{border-style:solid;color:var(--side-ink)}
+.sync-btn.on svg{color:#2e7d4f}
+.sync-btn.bad svg{color:var(--danger)}
+.sync-dlg{border:1px solid var(--side-line);border-radius:8px;padding:0;width:min(420px,calc(100vw - 32px));box-shadow:0 10px 40px rgba(28,37,48,.25);color:var(--ink)}
+.sync-dlg::backdrop{background:rgba(28,37,48,.35)}
+.sync-f{display:flex;flex-direction:column;gap:12px;padding:20px}
+.sync-f h3{margin:0;font-size:17px}
+.sync-f p{margin:0;font-size:13.5px;color:var(--muted);line-height:1.45}
+.sync-f label{display:flex;flex-direction:column;gap:4px;font-size:12.5px;font-weight:600}
+.sync-f input{font:inherit;font-weight:400;border:1px solid var(--side-line);border-radius:5px;padding:8px 10px}
+.sync-f input:focus{outline:none;border-color:var(--accent)}
+.sync-a{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.sync-a .sm{padding:8px 12px;font-size:13px}
 .nowork{margin-top:24px;padding:28px 20px;border:2px dashed var(--w3);border-radius:8px;background:rgba(255,255,255,.6);color:var(--muted);text-align:center;max-width:62ch}
 
 /* Un encadré par plan, sous « Plan de base » */
@@ -245,6 +268,7 @@ body.noscroll{overflow:hidden}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
       <span>Projets</span>
     </button>
+    <button class="rail-sync" id="railSync" type="button" title="Synchroniser mes appareils" aria-label="Synchroniser mes appareils"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4.5 4.5 0 0 1-.5-9A6 6 0 0 1 18 8.5a4 4 0 0 1-.5 9.5z"/></svg></button>
     <div class="side-top"><h1>Métré BTP</h1>
       <button class="ico fold" id="fold" title="Réduire le bandeau des projets" aria-label="Réduire le bandeau des projets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
     </div>
@@ -256,7 +280,11 @@ body.noscroll{overflow:hidden}
         <button class="btn" type="submit">+ Nouveau projet</button>
       </form>
     </div>
+    <div class="sync"><button class="sync-btn" id="syncBtn" type="button" title="Retrouver projets et plans sur tous vos appareils">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4.5 4.5 0 0 1-.5-9A6 6 0 0 1 18 8.5a4 4 0 0 1-.5 9.5z"/></svg>
+      <span id="syncTxt">Synchroniser mes appareils</span></button></div>
   </nav>
+  <dialog class="sync-dlg" id="syncDlg"></dialog>
   <nav class="side side2" id="side2" aria-label="Travaux du projet" hidden>
     <div class="eyebrow">Projet</div>
     <h2 class="pname" id="side2Title"></h2>
@@ -294,7 +322,9 @@ body.noscroll{overflow:hidden}
   const KEY='metre-btp-projets';
   let state={projects:[],current:null};
   try{const s=JSON.parse(localStorage.getItem(KEY));if(s&&Array.isArray(s.projects))state=s}catch(e){}
-  const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}};
+  const syncHook={};   // branché par la synchronisation en ligne (plus bas)
+  const saveLocal=()=>{try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}};
+  const save=()=>{saveLocal();syncHook.state?.()};
   const list=document.getElementById('list');
 
   const STAR='<svg viewBox="0 0 24 24" fill="FILL" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.8z"/></svg>';
@@ -403,8 +433,13 @@ body.noscroll{overflow:hidden}
   async function tx(mode,fn){const d=await db();return new Promise((res,rej)=>{const t=d.transaction('plans',mode);const out=fn(t.objectStore('plans'));t.oncomplete=()=>res(out&&out.result);t.onerror=()=>rej(t.error)})}
   const plansOfProject=pid=>tx('readonly',s=>s.index('project').getAll(pid)).catch(()=>[]);
   const plansOfTravail=tid=>tx('readonly',s=>s.index('travail').getAll(tid)).catch(()=>[]);
-  const addPlan=rec=>tx('readwrite',s=>s.put(rec));
-  const delPlan=id=>tx('readwrite',s=>s.delete(id));
+  const getPlan=id=>tx('readonly',s=>s.get(id)).catch(()=>null);
+  const allPlans=()=>tx('readonly',s=>s.getAll()).catch(()=>[]);
+  const putPlan=rec=>tx('readwrite',s=>s.put(rec));
+  const delPlanLocal=id=>tx('readwrite',s=>s.delete(id));
+  // toute modification d'un plan est datée puis envoyée en ligne si la synchronisation est active
+  const addPlan=rec=>{rec.stamp=Date.now();return putPlan(rec).then(x=>{syncHook.plan?.(rec.id);return x})};
+  const delPlan=id=>delPlanLocal(id).then(x=>{syncHook.plan?.(id);return x});
   async function deletePlansOf(pid){for(const r of await plansOfProject(pid))await delPlan(r.id).catch(()=>{})}
   async function deletePlansOfTravail(tid){for(const r of await plansOfTravail(tid))await delPlan(r.id).catch(()=>{})}
   // Plans ajoutés avant la séparation par travail : rattachés au premier travail du projet
@@ -1584,6 +1619,177 @@ body.noscroll{overflow:hidden}
     const t={id:newId(),name:inp.value.trim()||'Travail '+(p.travaux.length+1),created:Date.now()};
     p.travaux.push(t);p.curTravail=t.id;save();inp.value='';render();
   });
+  /* ---- Synchronisation en ligne (Supabase, offre gratuite) ----
+     Projets et travaux : une ligne par compte (table metre_state).
+     Plans : une ligne par plan (table metre_plans) + le fichier d'origine dans le stockage « plans ».
+     Chaque appareil garde tout en local ; à chaque changement on envoie, au retour sur la page on reçoit.
+     En cas de modification sur deux appareils, la plus récente gagne. */
+  const SB_CONF={url:'',key:''};   // adresse du projet Supabase et clé publique « anon » (sans danger côté navigateur)
+  const SB_LIB='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js';
+  const SBK='metre-btp-sync';
+  let sb=null,user=null,busy=false,again=false,syncErr='',lastOk=0,schedT=null;
+  let sm={};try{sm=JSON.parse(localStorage.getItem(SBK))||{}}catch(e){}
+  sm.pending=sm.pending||{};sm.up=sm.up||{};   // up : plans dont le fichier est déjà en ligne
+  const saveSm=()=>{try{localStorage.setItem(SBK,JSON.stringify(sm))}catch(e){}};
+  const sbConf=()=>SB_CONF.url&&SB_CONF.key?SB_CONF:sm.conf||null;
+  let lastProj=JSON.stringify(state.projects);
+  syncHook.state=()=>{const s=JSON.stringify(state.projects);if(s===lastProj)return;lastProj=s;sm.pstamp=Date.now();sm.dirty=true;saveSm();schedule()};
+  syncHook.plan=id=>{sm.pending[id]=(sm.pending[id]||0)+1;saveSm();schedule()};
+  const schedule=()=>{if(!user)return;clearTimeout(schedT);schedT=setTimeout(()=>syncNow(true),1500)};
+  const metaOf=r=>{const m={};for(const k in r)if(k!=='blob'&&k!=='dwg'&&k!=='blobUp')m[k]=r[k];m.blobUp=!!sm.up[r.id];return m};
+  const path=id=>user.id+'/'+id;
+
+  async function push(){
+    if(sm.dirty){
+      const {error}=await sb.from('metre_state').upsert({user_id:user.id,data:{projects:state.projects},stamp:sm.pstamp||Date.now()});
+      if(error)throw error;sm.dirty=false;saveSm()}
+    for(const id of Object.keys(sm.pending)){
+      const v=sm.pending[id],r=await getPlan(id);
+      if(r){
+        if(!sm.up[id]&&r.blob){
+          const {error}=await sb.storage.from('plans').upload(path(id),r.blob,{upsert:true,contentType:r.blob.type||'application/octet-stream'});
+          if(error)throw error;sm.up[id]=1;saveSm()}
+        const {error}=await sb.from('metre_plans').upsert({user_id:user.id,id,meta:metaOf(r),stamp:r.stamp||Date.now(),deleted:false});
+        if(error)throw error;
+      }else{
+        const {error}=await sb.from('metre_plans').upsert({user_id:user.id,id,meta:null,stamp:Date.now(),deleted:true});
+        if(error)throw error;
+        await sb.storage.from('plans').remove([path(id)]).catch(()=>{});delete sm.up[id];
+      }
+      if(sm.pending[id]===v)delete sm.pending[id];   // modifié pendant l'envoi : on renverra
+      saveSm();
+    }
+  }
+  async function pull(){
+    const first=!(sm.done||{})[user.id];
+    // projets et travaux
+    const {data:st,error:e1}=await sb.from('metre_state').select('data,stamp').eq('user_id',user.id).maybeSingle();
+    if(e1)throw e1;
+    let changed=false;
+    if(st&&first){
+      // première synchro de cet appareil : on réunit les projets d'ici et ceux du compte
+      const remote=st.data?.projects||[],ids=new Set(remote.map(p=>p.id));
+      state.projects=[...remote,...state.projects.filter(p=>!ids.has(p.id))];
+      changed=true;sm.pstamp=Date.now();sm.dirty=true;
+    }else if(st&&!sm.dirty&&st.stamp>(sm.pstamp||0)){
+      state.projects=st.data?.projects||[];sm.pstamp=st.stamp;changed=true;
+    }else if(!st&&state.projects.length){sm.pstamp=sm.pstamp||Date.now();sm.dirty=true}
+    if(changed){
+      if(!state.projects.some(p=>p.id===state.current))state.current=state.projects[0]?.id||null;
+      lastProj=JSON.stringify(state.projects);saveLocal();
+    }
+    // plans
+    let q=sb.from('metre_plans').select('id,meta,stamp,deleted,updated_at').eq('user_id',user.id).order('updated_at');
+    if(!first&&sm.lastPull)q=q.gt('updated_at',sm.lastPull);
+    const {data:rows,error:e2}=await q;if(e2)throw e2;
+    const touched=new Set();
+    for(const row of rows||[]){
+      const loc=await getPlan(row.id),mine=row.id in sm.pending;
+      if(row.deleted){delete sm.up[row.id];if(loc&&!mine){await delPlanLocal(row.id);touched.add(loc.travailId)}}
+      else if(!mine&&(!loc||row.stamp>(loc.stamp||0))){
+        let blob=loc?.blob;
+        if(!blob){
+          if(!row.meta?.blobUp)continue;      // fichier pas encore envoyé par l'autre appareil
+          const {data,error}=await sb.storage.from('plans').download(path(row.id));if(error)continue;
+          blob=new File([data],row.meta.name||'plan',{type:row.meta.type||data.type})}
+        const rec={...row.meta,blob,stamp:row.stamp};delete rec.blobUp;sm.up[row.id]=1;
+        if(loc?.dwg)rec.dwg=loc.dwg;
+        else if(/\.dwg$/i.test(rec.name||'')){try{rec.dwg=await readDwg(blob)}catch(e){}}
+        await putPlan(rec);touched.add(rec.travailId);if(loc)touched.add(loc.travailId);
+      }
+      if(!sm.lastPull||row.updated_at>sm.lastPull)sm.lastPull=row.updated_at;
+    }
+    if(first){
+      // plans de cet appareil absents du compte : à envoyer
+      const known=new Set((rows||[]).map(x=>x.id));
+      for(const r of await allPlans())if(!known.has(r.id))sm.pending[r.id]=(sm.pending[r.id]||0)+1;
+      (sm.done=sm.done||{})[user.id]=true;
+    }
+    saveSm();
+    if(changed)render();
+    const t=curTravail();
+    if(t&&touched.has(t.id)){shownTid=undefined;render()}
+  }
+  async function syncNow(pushOnly){
+    if(!user)return;
+    if(busy){again=true;return}
+    busy=true;showSync();
+    try{if(!pushOnly)await pull();await push();syncErr='';lastOk=Date.now()}
+    catch(e){syncErr=navigator.onLine===false?'hors ligne':(e?.message||'erreur')}
+    finally{busy=false;showSync();if(again){again=false;syncNow()}}
+  }
+  // au retour sur la page, et toutes les 30 s quand elle est affichée
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncNow()});
+  window.addEventListener('online',()=>syncNow());
+  setInterval(()=>{if(!document.hidden)syncNow()},30000);
+
+  function loadSb(){
+    if(window.supabase)return Promise.resolve();
+    return new Promise((res,rej)=>{const s=document.createElement('script');s.src=SB_LIB;s.onload=res;s.onerror=()=>rej(new Error('lib'));document.head.appendChild(s)});
+  }
+  async function initSync(){
+    const c=sbConf();if(!c){showSync();return}
+    try{await loadSb()}catch(e){syncErr='service de synchronisation injoignable';showSync();return}
+    sb=window.supabase.createClient(c.url,c.key,{auth:{persistSession:true,autoRefreshToken:true,storageKey:'metre-btp-auth'}});
+    const {data}=await sb.auth.getSession();user=data?.session?.user||null;
+    sb.auth.onAuthStateChange((ev,s)=>{const u=s?.user||null;if((u&&u.id)!==(user&&user.id)){user=u;showSync();if(user)syncNow()}});
+    showSync();if(user)syncNow();
+  }
+
+  /* Bouton dans la bande des projets + fenêtre de connexion */
+  const railSync=document.getElementById('railSync'),syncBtn=document.getElementById('syncBtn'),syncTxt=document.getElementById('syncTxt'),dlg=document.getElementById('syncDlg');
+  const ago=t=>{const s=Math.round((Date.now()-t)/1000);return s<60?'à l\'instant':s<3600?'il y a '+Math.round(s/60)+' min':'il y a '+Math.round(s/3600)+' h'};
+  function showSync(){
+    for(const b of [syncBtn,railSync]){b.classList.toggle('on',!!user);b.classList.toggle('bad',!!(user&&syncErr))}
+    syncTxt.textContent=!user?'Synchroniser mes appareils':busy?'Synchronisation…':syncErr?'Synchro en attente ('+syncErr+')'
+      :Object.keys(sm.pending).length||sm.dirty?'Envoi en attente…':lastOk?'Synchronisé '+ago(lastOk):'Synchronisé';
+    railSync.title=syncTxt.textContent;
+    if(dlg.open&&!dlg.querySelector('input:focus'))fillDlg();
+  }
+  setInterval(()=>{if(user&&!busy)showSync()},30000);
+  function fillDlg(msg){
+    const c=sbConf();
+    let h='<form method="dialog" class="sync-f"><h3>Synchronisation</h3>';
+    if(!c){
+      h+=`<p>Pour retrouver vos projets sur tous vos appareils, renseignez votre projet Supabase (gratuit) : Paramètres du projet → API.</p>
+        <label>Adresse du projet<input name="url" placeholder="https://xxxx.supabase.co" required></label>
+        <label>Clé publique (anon)<input name="key" required></label>
+        <div class="sync-a"><button class="btn" value="conf">Enregistrer</button><button class="sm" value="close" formnovalidate>Fermer</button></div>`;
+    }else if(!user){
+      h+=`<p>Connectez-vous avec le même compte sur chaque appareil : projets, travaux et plans s'y retrouvent automatiquement.</p>
+        <label>E-mail<input name="email" type="email" autocomplete="username" required></label>
+        <label>Mot de passe<input name="pw" type="password" autocomplete="current-password" minlength="6" required></label>
+        <div class="sync-a"><button class="btn" value="in">Se connecter</button><button class="sm" value="up">Créer un compte</button><button class="sm" value="close" formnovalidate>Fermer</button></div>`;
+    }else{
+      h+=`<p>Connecté avec <b>${esc(user.email||'')}</b>.<br>${esc(syncTxt.textContent)}.</p>
+        <div class="sync-a"><button class="btn" value="now">Synchroniser maintenant</button><button class="sm" value="out">Se déconnecter</button><button class="sm" value="close">Fermer</button></div>`;
+    }
+    h+=`<div class="err sync-e"${msg?'':' hidden'}>${esc(msg||'')}</div></form>`;
+    dlg.innerHTML=h;
+    const f=dlg.querySelector('form');
+    f.onsubmit=async e=>{
+      const a=e.submitter?.value;if(a==='close')return;
+      e.preventDefault();
+      const v=n=>f.elements[n]?.value.trim();
+      try{
+        if(a==='conf'){sm.conf={url:v('url').replace(/\/+$/,''),key:v('key')};saveSm();await initSync();fillDlg();return}
+        if(a==='in'||a==='up'){
+          const r=a==='in'?await sb.auth.signInWithPassword({email:v('email'),password:f.elements.pw.value})
+            :await sb.auth.signUp({email:v('email'),password:f.elements.pw.value,options:{emailRedirectTo:location.href.split('#')[0]}});
+          if(r.error)throw r.error;
+          if(a==='up'&&!r.data.session){fillDlg('Compte créé : ouvrez le lien reçu par e-mail pour le confirmer, puis connectez-vous.');return}
+          user=r.data.user;showSync();syncNow();dlg.close();return}
+        if(a==='now'){syncNow();return}
+        if(a==='out'){await sb.auth.signOut();user=null;showSync();dlg.close();return}
+      }catch(err){
+        const m=String(err?.message||err);
+        fillDlg(/invalid login/i.test(m)?'E-mail ou mot de passe incorrect.':/already registered/i.test(m)?'Un compte existe déjà avec cet e-mail : connectez-vous.'
+          :/not confirmed/i.test(m)?'Confirmez d\'abord votre adresse avec le lien reçu par e-mail.':'Erreur : '+m)}
+    };
+  }
+  syncBtn.onclick=railSync.onclick=()=>{fillDlg();dlg.showModal()};
+  initSync();
+
   render();
 })();
 </script>
