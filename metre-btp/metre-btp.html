@@ -308,7 +308,7 @@ body.noscroll{overflow:hidden}
         <b>Glissez vos plans ici</b>
         <span>ou cliquez pour choisir des fichiers · images (PNG, JPG), PDF ou DWG</span>
       </label>
-      <input id="planIn" type="file" accept="image/*,application/pdf,.dwg" multiple hidden>
+      <input id="planIn" type="file" accept="image/*,application/pdf,.pdf,.dwg,.png,.jpg,.jpeg" multiple hidden>
       <div class="err" id="planErr" hidden></div>
     </section>
     <div class="boxes" id="plans"></div>
@@ -1249,11 +1249,13 @@ body.noscroll{overflow:hidden}
   /* ---- Plans DWG : lus dans le navigateur par LibreDWG (WebAssembly, chargé au premier DWG),
      convertis une fois en dessin simplifié (r.dwg : calques + traits, remplissages, textes),
      puis dessinés sur fond blanc comme une image. ---- */
-  const DWG_LIB='https://cdn.jsdelivr.net/npm/@mlightcad/libredwg-web@0.7.14/';
+  // Lecteur DWG : copie locale (vendor/) d'abord, CDN en secours
+  const DWG_LIBS=[new URL('vendor/libredwg-web/',location.href).href,'https://cdn.jsdelivr.net/npm/@mlightcad/libredwg-web@0.7.14/'];
   let dwgLibP=null;
-  const dwgLib=()=>dwgLibP||(dwgLibP=import(DWG_LIB+'dist/libredwg-web.js')
-    .then(m=>m.LibreDwg.create(DWG_LIB+'wasm').then(L=>({L,m})))
-    .catch(e=>{dwgLibP=null;throw e}));
+  const loadDwgLib=async()=>{let err;
+    for(const b of DWG_LIBS){try{const m=await import(b+'dist/libredwg-web.js');return {L:await m.LibreDwg.create(b+'wasm'),m}}catch(e){err=e}}
+    const x=new Error('lib');x.cause=err;x.lib=true;throw x};
+  const dwgLib=()=>dwgLibP||(dwgLibP=loadDwgLib().catch(e=>{dwgLibP=null;throw e}));
   const isDwg=f=>/\.dwg$/i.test(f.name||'');
   // Couleurs AutoCAD (ACI) : 1-9 fixes, 10-249 teintes par pas de 15°, 250-255 gris
   const ACI_FIX=[null,'#ff0000','#ffff00','#00ff00','#00ffff','#0000ff','#ff00ff','#000000','#808080','#c0c0c0'];
@@ -1576,8 +1578,9 @@ body.noscroll{overflow:hidden}
   }
   async function addFiles(files){
     const pid=state.current,t=curTravail();if(!pid||!t)return;
-    const ok=[...files].filter(f=>f.type.startsWith('image/')||f.type==='application/pdf'||isDwg(f));
-    const refused=files.length-ok.length,bad=[];
+    const ok=[...files].filter(f=>f.type.startsWith('image/')||f.type==='application/pdf'||/\.(pdf|png|jpe?g|gif|webp)$/i.test(f.name)||isDwg(f));
+    for(const f of ok)if(!f.type&&/\.pdf$/i.test(f.name))Object.defineProperty(f,'type',{value:'application/pdf'});
+    const refused=files.length-ok.length,bad=[];let libErr=false;
     errEl.hidden=!refused;errEl.textContent=refused?refused+' fichier(s) ignoré(s) : seuls les images, les PDF et les DWG sont acceptés.':'';
     try{
       for(const f of ok){
@@ -1586,12 +1589,13 @@ body.noscroll{overflow:hidden}
           // DWG : converti une fois à l'ajout (le lecteur se télécharge au premier DWG)
           errEl.hidden=false;errEl.textContent='Lecture du DWG « '+f.name+' »…';
           try{rec.dwg=await readDwg(f);rec.type='application/acad';if(!rec.dwg.items.length)throw new Error('vide')}
-          catch(e){bad.push(f.name);continue}
+          catch(e){if(e&&e.lib){libErr=true;console.error(e.cause||e)}else bad.push(f.name);continue}
           finally{errEl.hidden=!refused;errEl.textContent=refused?refused+' fichier(s) ignoré(s) : seuls les images, les PDF et les DWG sont acceptés.':''}
         }
         await addPlan(rec);
       }
-      if(bad.length){errEl.hidden=false;errEl.textContent='Impossible de lire ce DWG : '+bad.join(', ')+' (fichier abîmé, version non prise en charge, ou lecteur DWG non téléchargé : vérifiez la connexion).'}
+      if(libErr){errEl.hidden=false;errEl.textContent='Le lecteur DWG n\'a pas pu se charger dans ce navigateur (connexion ou navigateur trop ancien). Réessayez après avoir rechargé la page (Ctrl+F5).'}
+      else if(bad.length){errEl.hidden=false;errEl.textContent='Impossible de lire ce DWG : '+bad.join(', ')+' (fichier abîmé ou version non prise en charge). Essayez de l\'enregistrer en DWG 2018 ou plus ancien, ou exportez-le en PDF.'}
     }catch(e){errEl.hidden=false;errEl.textContent='Impossible d\'enregistrer le plan dans ce navigateur (stockage indisponible ou plein).'}
     renderPlans();
   }
