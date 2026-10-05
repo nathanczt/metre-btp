@@ -731,7 +731,7 @@ body.noscroll{overflow:hidden}
       if(picking===k){z.cb.innerHTML=`<span class="msg">${z.pickMsg}</span>`;return}
       if(!r[k]){z.lp.textContent='';z.cb.innerHTML=`<span class="msg">${z.none}</span>`;return}
       z.cb.innerHTML='<span class="msg">Chargement de la légende…</span>';
-      try{if(k==='legend2'&&r.dwg&&legDwg())api.redraw();const cv=await api.crop(r[k],k==='legend2'&&r.dwg&&dwgLeg.E?dwgLeg.E.map((e,i)=>({b:e.box,n:i+1,c:e.c})):null);if(my!==z.tok)return;z.lp.textContent=api.pages()>1?'page '+r[k].page:'';cv.setAttribute('aria-label',z.label);z.cb.innerHTML='';z.cb.appendChild(cv)}
+      try{const cv=await api.crop(r[k],k==='legend2'&&r.dwg&&legFresh()&&dwgLeg.E?dwgLeg.E.map((e,i)=>({b:e.box,n:i+1,c:e.c})):null);if(my!==z.tok)return;z.lp.textContent=api.pages()>1?'page '+r[k].page:'';cv.setAttribute('aria-label',z.label);z.cb.innerHTML='';z.cb.appendChild(cv)}
       catch(e){if(my===z.tok)z.cb.innerHTML='<span class="msg">Impossible d\'afficher la légende.</span>'}
     }
     function render(){setBtns();renderZone('legend');renderZone('legend2');buildUse()}
@@ -796,12 +796,13 @@ body.noscroll{overflow:hidden}
     let dwgQ={k:null,Q:null};
     /* Sans légende tracée : une ligne par calque actif. Légende tracée sur le plan (« Encadrer la légende ») :
        une ligne par échantillon de la légende, métré sur les objets du plan identiques (calques gelés exclus). */
-    let dwgLeg={k:null,E:null};
+    let dwgLeg={k:null,E:null},legTok=0;
     // Lignes de la légende DWG encadrée (recalculées si la zone, les zones exclues ou les calques gelés changent) ; vrai si recalculées
-    function legDwg(){const D=r.dwg;if(!D||!r.legend2)return false;
-      const off=new Set(D.layers.map((L,i)=>((r.ocg||{})[L.name]??L.on)?-1:i).filter(i=>i>=0));
-      const ck=JSON.stringify([r.legend2,r.excl||[],[...off]]);if(dwgLeg.k===ck)return false;
-      dwgLeg={k:ck,E:dwgLegend(D,r.legend2,off,r.excl)};
+    const legOff=()=>new Set(r.dwg.layers.map((L,i)=>((r.ocg||{})[L.name]??L.on)?-1:i).filter(i=>i>=0));
+    const legKey=()=>JSON.stringify([r.legend2,r.excl||[],[...legOff()]]);
+    const legFresh=()=>!!r.dwg&&!!r.legend2&&dwgLeg.k===legKey();
+    function legDwg(){const D=r.dwg,ck=legKey();
+      try{dwgLeg={k:ck,E:dwgLegend(D,r.legend2,legOff(),r.excl)}}catch(e){console.error(e);dwgLeg={k:ck,E:[],err:true}}
       // mise en avant sur le plan : objets métrés + échantillon de la légende
       dwgHL.set(D,new Map(dwgLeg.E.map(e=>[e.key,new Set([...e.items,...e.smp])])));return true}
     function buildUseDwg(){
@@ -812,7 +813,9 @@ body.noscroll{overflow:hidden}
       r.labels=r.labels||{};r.selected=r.selected||[];r.measure=r.measure||{};
       let rows;
       if(legMode){
-        if(legDwg())setTimeout(()=>{api.redraw();renderZone('legend2')});
+        // lecture de la légende après affichage de l'extrait encadré (plan lourd : quelques instants)
+        if(!legFresh()){useInfo.textContent='';useList.innerHTML='<li class="msg">Lecture de la légende encadrée…</li>';buildStruct([]);
+          const my=++legTok;setTimeout(()=>{if(my!==legTok||!r.legend2||legFresh())return;legDwg();buildUseDwg();api.redraw();renderZone('legend2')},40);return}
         const m=D.m;
         rows=dwgLeg.E.map((e,i)=>{const nb=i+1;const auto=e.label||'Légende n°'+(i+1),lab=norm(r.labels[e.key]??auto);
           const m2=(e.kind==='f'?e.q.fill:e.q.closed)*m*m,ml=(e.kind==='f'?e.q.per:e.q.len)*m;
@@ -827,7 +830,7 @@ body.noscroll{overflow:hidden}
       }
       useList.innerHTML='';
       if(!rows.length){useInfo.textContent='';
-        useList.innerHTML=legMode?'<li class="msg">Aucun échantillon trouvé dans la zone tracée. Vérifiez que le rectangle englobe bien la légende (bouton « Changer la zone »), et que ses calques ne sont pas gelés.</li>'
+        useList.innerHTML=legMode&&dwgLeg.err?'<li class="msg">La lecture de cette légende a échoué. Essayez un rectangle plus serré autour de la légende (bouton « Changer la zone »).</li>':legMode?'<li class="msg">Aucun échantillon trouvé dans la zone tracée. Vérifiez que le rectangle englobe bien la légende (bouton « Changer la zone »), et que ses calques ne sont pas gelés.</li>'
           :'<li class="msg">Aucun calque actif avec un dessin. Dégelez des calques dans la liste « Calques », ou cliquez sur « Encadrer la légende » pour tracer la légende du plan.</li>';
         useMerge.hidden=true;buildStruct([]);return}
       rows.forEach(it=>{
@@ -1735,13 +1738,16 @@ body.noscroll{overflow:hidden}
     const ex=(excl||[]).map(e=>dRect(D,e)),plan=[];
     for(const it of D.items){if(it.k==='t'||off.has(it.l))continue;const b=dBox(it),cx=(b[0]+b[2])/2,cy=(b[1]+b[3])/2;
       if(cx>=R[0]&&cx<=R[2]&&cy>=R[1]&&cy<=R[3])continue;if(ex.some(e=>cx>=e[0]&&cx<=e[2]&&cy>=e[1]&&cy<=e[3]))continue;plan.push(it)}
+    // index des objets du plan par aspect (calculé une fois : plans lourds)
+    const byL=new Map(),byA=new Map(),put=(M,k,it)=>{let a=M.get(k);if(!a)M.set(k,a=[]);a.push(it)};
+    for(const it of plan){put(byL,dSig(it,true),it);put(byA,dSig(it,false),it)}
     const seen=new Set(),out=[];
     for(const c of cl){
       const prim=c.items.some(it=>it.k==='f')?c.items.filter(it=>it.k==='f'):c.items;
       const sigL=new Set(prim.map(it=>dSig(it,true))),sig=new Set(prim.map(it=>dSig(it,false)));
       const key=[...sigL].sort().join('§');if(seen.has(key))continue;seen.add(key);
-      let m=plan.filter(it=>sigL.has(dSig(it,true))),byLayer=true;
-      if(!m.length){m=plan.filter(it=>sig.has(dSig(it,false)));byLayer=false}
+      let m=[...sigL].flatMap(k=>byL.get(k)||[]),byLayer=true;
+      if(!m.length){m=[...sig].flatMap(k=>byA.get(k)||[]);byLayer=false}
       const label=c.texts.sort((a,b)=>b.b[3]-a.b[3]||a.b[0]-b.b[0]).map(t=>t.it.s.trim()).join(' ').replace(/\s+/g,' ');
       const w=c.b[2]-c.b[0],h=c.b[3]-c.b[1];
       const bx=c.texts.reduce((u,t)=>[Math.min(u[0],t.b[0]),Math.min(u[1],t.b[1]),Math.max(u[2],t.b[2]),Math.max(u[3],t.b[3])],c.b.slice());
