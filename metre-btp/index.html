@@ -184,6 +184,7 @@ main p{color:var(--muted);margin:6px 0 0}
 .ocg-bar .ocg-h .sm{text-transform:none;letter-spacing:0}
 .ocg-bar label{display:flex;align-items:center;gap:8px;padding:6px 12px;color:var(--ink);cursor:pointer;overflow-wrap:anywhere}
 .ocg-bar label:hover{background:var(--w2)}
+.ocg-bar label.hit{background:var(--accent-tint);box-shadow:inset 3px 0 0 var(--accent);font-weight:600}
 .ocg-bar label.off{color:var(--muted);text-decoration:line-through}
 @media (max-width:720px){.pane.full.ocg-on{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) 35vh}.pane.full.ocg-on>.ocg-bar{grid-column:1;grid-row:3;border-left:0;border-top:1px solid var(--side-line)}}
 .excl-bar .chip{color:var(--danger);border-color:#e7b9b5;background:var(--danger-bg)}
@@ -575,7 +576,11 @@ body.noscroll{overflow:hidden}
         <button class="sm ocg-all" title="Dégeler les calques affichés dans la liste">Tout afficher</button>
         <button class="sm ocg-off" title="Geler les calques affichés dans la liste">Tout geler</button></div>
       <div class="ocg-l"></div>`;
-    const head=bar.querySelector('.ocg-h b'),q=bar.querySelector('input'),ul=bar.querySelector('.ocg-l');
+    const head=bar.querySelector('.ocg-h b'),q=bar.querySelector('input'),ul=bar.querySelector('.ocg-l'),view=box.querySelector('.view');
+    let marked=null;   // calques de l'objet cliqué sur l'aperçu : en tête de liste et surlignés
+    api.markLayers=set=>{marked=set&&set.size?set:null;if(marked){q.value='';pane.classList.add('ocg-on')}fill();if(marked)ul.scrollTop=0};
+    // clic hors de l'aperçu (et hors de la liste, pour pouvoir geler un calque surligné) : ordre d'origine
+    document.addEventListener('pointerdown',e=>{if(marked&&box.isConnected&&!view.contains(e.target)&&!bar.contains(e.target))api.markLayers(null)});
     addFold(bar,'calques');
     const apply=()=>{addPlan(r).catch(()=>{});api.redraw();legend.render();fill()};
     const shown=()=>{const t=q.value.trim().toLowerCase();return api.layersNow().filter(g=>!t||g.name.toLowerCase().includes(t))};
@@ -583,11 +588,11 @@ body.noscroll{overflow:hidden}
     const fill=()=>{
       const L=api.layersNow(),off=L.filter(g=>!g.visible).length;
       btn.textContent='Calques ('+(off?off+' gelé'+(off>1?'s':'')+' / '+L.length:L.length)+')';
-      head.textContent=`Calques : ${L.length-off} affiché${L.length-off>1?'s':''} sur ${L.length}`;
-      const S=shown();ul.innerHTML='';
+      head.textContent=`Calques : ${L.length-off} affiché${L.length-off>1?'s':''} sur ${L.length}`+(marked?` · ${marked.size} sous le clic`:'');
+      let S=shown();if(marked)S=[...S.filter(g=>marked.has(g.name)),...S.filter(g=>!marked.has(g.name))];ul.innerHTML='';
       if(!S.length)ul.innerHTML='<div class="ocg-none">Aucun calque ne correspond.</div>';
       S.forEach(g=>{
-        const lab=document.createElement('label');lab.className=g.visible?'':'off';lab.title=g.name;
+        const lab=document.createElement('label');lab.className=(g.visible?'':'off')+(marked&&marked.has(g.name)?' hit':'');lab.title=g.name;
         lab.innerHTML=`<input type="checkbox"${g.visible?' checked':''}>${g.c?`<span class="sw" style="background:${esc(g.c)}"></span>`:''}<span>${esc(g.name)}</span><button class="ocg-only" title="N'afficher que ce calque">seul</button>`;
         lab.querySelector('input').onchange=e=>{api.setLayer(g.id,e.target.checked);apply()};
         lab.querySelector('.ocg-only').onclick=e=>{e.preventDefault();api.layersNow().forEach(h=>api.setLayer(h.id,h.id===g.id));apply()};
@@ -1726,6 +1731,21 @@ body.noscroll{overflow:hidden}
     for(const p of it.p)for(let i=0;i<p.length;i+=2){if(p[i]<a)a=p[i];if(p[i]>c)c=p[i];if(p[i+1]<b)b=p[i+1];if(p[i+1]>d)d=p[i+1]}
     return [a,b,c,d];
   }
+  // l'objet passe-t-il à moins de tol du point (X,Y) ? (intérieur d'un remplissage, d'un texte, ou près d'un trait)
+  const dBoxC=new WeakMap();
+  function dHit(it,X,Y,tol){
+    let b=dBoxC.get(it);if(!b){b=dBox(it);dBoxC.set(it,b)}
+    if(X<b[0]-tol||X>b[2]+tol||Y<b[1]-tol||Y>b[3]+tol)return false;
+    if(it.k==='t')return true;
+    const seg=(p,z)=>{const n=p.length;for(let i=0;i+2<n+(z?2:0);i+=2){const x1=p[i],y1=p[i+1],j=(i+2)%n,x2=p[j],y2=p[j+1];
+      const dx=x2-x1,dy=y2-y1,L=dx*dx+dy*dy,t=L?Math.max(0,Math.min(1,((X-x1)*dx+(Y-y1)*dy)/L)):0;
+      if(Math.hypot(X-x1-t*dx,Y-y1-t*dy)<=tol+(it.w||0)/2)return true}return false};
+    if(it.k==='f'){let inside=false;
+      for(const p of it.p){if(seg(p,true))return true;const n=p.length;
+        for(let i=0,j=n-2;i<n;j=i,i+=2)if((p[i+1]>Y)!==(p[j+1]>Y)&&X<(p[j]-p[i])*(Y-p[i+1])/(p[j+1]-p[i+1])+p[i])inside=!inside}
+      return inside}
+    return it.p.some(p=>seg(p,it.z));
+  }
   const dPageBox=D=>{const [x0,y0,x1,y1]=D.box,pad=Math.max(x1-x0,y1-y0)*.02||1;return {X0:x0-pad,Y1:y1+pad,PW:x1-x0+2*pad,PH:y1-y0+2*pad}};
   const dRect=(D,e)=>{const P=dPageBox(D);return [P.X0+e.x*P.PW,P.Y1-(e.y+e.h)*P.PH,P.X0+(e.x+e.w)*P.PW,P.Y1-e.y*P.PH]};
   const dPat=it=>it.pat?it.pat.map(d=>Math.round(((d.a*180/Math.PI)%180+180)%180)+'/'+d.d.length).sort().join(','):'plein';
@@ -1817,7 +1837,20 @@ body.noscroll{overflow:hidden}
     const draw=()=>{const s=drawDwg(D,hidden(),null,3000,hl());pres.setRaw(r.rot?rotated(s.canvas,s.canvas.width,s.canvas.height,r.rot):s.canvas)};
     const list=()=>D.layers.map((L,i)=>({id:L.name,name:L.name,visible:(r.ocg||{})[L.name]??L.on,c:L.c})).filter((g,i)=>D.items.some(it=>it.l===i));
     setTimeout(()=>{try{draw()}catch(e){view.innerHTML='<span class="msg">Impossible d\'afficher ce DWG.</span>'}});
-    return {redraw:draw,page:()=>1,pages:()=>1,setFilter:pres.setFilter,setOverlay:pres.setOverlay,
+    // clic (sans glisser) sur un objet du plan : ses calques remontent en tête de la liste des calques
+    let api,down=null;
+    view.addEventListener('pointerdown',e=>{down=[e.clientX,e.clientY]},true);
+    view.addEventListener('click',e=>{
+      if(view.classList.contains('picking')||!down||Math.hypot(e.clientX-down[0],e.clientY-down[1])>5||!api.markLayers)return;
+      const media=view.querySelector('canvas:not(.sharp)');if(!media)return;
+      const br=media.getBoundingClientRect(),nw=media.width,nh=media.height,fk=Math.min(br.width/nw,br.height/nh);
+      const fx=(e.clientX-br.left-(br.width-nw*fk)/2)/(nw*fk),fy=(e.clientY-br.top-(br.height-nh*fk)/2)/(nh*fk);
+      if(fx<0||fx>1||fy<0||fy>1){api.markLayers(null);return}
+      const [u,v]=toUnrot(fx,fy,r.rot||0),P=dPageBox(D),X=P.X0+u*P.PW,Y=P.Y1-v*P.PH;
+      const tol=6*Math.max(P.PW,P.PH)/Math.max(nw*fk,nh*fk),off=hidden(),hit=new Set();   // 6 pixels à l'écran
+      for(const it of D.items)if(!off.has(it.l)&&!hit.has(it.l)&&dHit(it,X,Y,tol))hit.add(it.l);
+      api.markLayers(hit.size?new Set([...hit].map(i=>D.layers[i].name)):null)});
+    return api={redraw:draw,page:()=>1,pages:()=>1,setFilter:pres.setFilter,setOverlay:pres.setOverlay,
       crop:async(rect,marks)=>{const s=drawDwg(D,hidden(),rect,1600);
         if(marks&&marks.length){   // lignes de légende reconnues : cadre numéroté
           const R=dRect(D,rect),cv=s.canvas,g=cv.getContext('2d'),W=cv.width,H=cv.height,u=Math.max(W,H)/400;
