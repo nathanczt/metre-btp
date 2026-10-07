@@ -1460,7 +1460,7 @@ body.noscroll{overflow:hidden}
   const DWG_LIBS=[new URL('vendor/libredwg-web/',location.href).href,'https://cdn.jsdelivr.net/npm/@mlightcad/libredwg-web@0.7.14/'];
   let dwgLibP=null;
   const loadDwgLib=async()=>{let err;
-    for(const b of DWG_LIBS){try{const m=await import(b+'dist/libredwg-web.js');return {L:await m.LibreDwg.create(b+'wasm'),m}}catch(e){err=e}}
+    for(const b of DWG_LIBS){try{const m=await import(b+'dist/libredwg-web.js');await m.LibreDwg.create(b+'wasm');return {m,b}}catch(e){err=e}}
     const x=new Error('lib');x.cause=err;x.lib=true;throw x};
   const dwgLib=()=>dwgLibP||(dwgLibP=loadDwgLib().catch(e=>{dwgLibP=null;throw e}));
   const isDwg=f=>/\.dwg$/i.test(f.name||'');
@@ -1484,6 +1484,7 @@ body.noscroll{overflow:hidden}
     const li=new Map(layers.map((L,i)=>[L.name,i]));
     const layerOf=n=>{if(!li.has(n)){li.set(n,layers.length);layers.push({name:n,c:'#000000',on:true})}return li.get(n)};
     const blocks=new Map((db.tables?.BLOCK_RECORD?.entries||[]).map(b=>[b.name,b]));
+    const blocksH=new Map((db.tables?.BLOCK_RECORD?.entries||[]).map(b=>[b.handle,b]));
     const model=[...blocks.values()].find(b=>/^\*model_space$/i.test(b.name));
     const ents=model?db.entities.filter(e=>e.ownerBlockRecordSoftId===model.handle):db.entities;
     const items=[];let bx0=Infinity,by0=Infinity,bx1=-Infinity,by1=-Infinity;
@@ -1574,6 +1575,20 @@ body.noscroll{overflow:hidden}
           const ap=e.attachmentPoint||1,h=(e.textHeight||1)*sc;
           items.push({l:L,c,k:'t',s,x,y,h,r:rot,ha:[0,1,2].includes((ap-1)%3)?['left','center','right'][(ap-1)%3]:'left',va:ap<=3?'top':ap<=6?'middle':'bottom',ml:1});
           break}
+        case 'POINT':{const [x,y]=tp(M,[e.position.x,e.position.y]);items.push({l:L,c,k:'s',p:[new Float64Array([x,y,x,y])],z:false,w:0,pt:1});break}
+        case 'MLINE':{   // multiligne : une polyligne par ligne, décalée le long des onglets
+          const V=e.vertices||[],n=e.numberOfLines||(V[0]?.lines||[]).length,cl=!!(e.flags&2);
+          for(let j=0;j<n;j++){const o=[];for(const v of V){const t=v.lines?.[j]?.segmentParams?.[0]||0,md=v.miterDirection||{x:0,y:0};o.push(v.vertex.x+md.x*t,v.vertex.y+md.y*t)}S(o,cl)}
+          break}
+        case 'MULTILEADER':{   // ligne de repère (+ palier) et texte
+          for(const sec of e.leaderSections||[]){const lp=sec.lastLeaderLinePoint,dv=sec.doglegVector,dl=sec.doglegLength??e.doglegLength??0;
+            for(const ln of sec.leaderLines||[]){const o=[];(ln.vertices||[]).forEach(v=>o.push(v.x,v.y));if(lp)o.push(lp.x,lp.y);S(o)}
+            if(lp&&dv&&dl)S([lp.x,lp.y,lp.x+dv.x*dl,lp.y+dv.y*dl])}
+          if(e.hasMText&&e.textContent&&e.textAnchor){const s=mtext(e.textContent);if(s.trim()){const [x,y]=tp(M,[e.textAnchor.x,e.textAnchor.y]),sc=Math.hypot(M[0],M[1]);
+            items.push({l:L,c,k:'t',s,x,y,h:(e.textHeight||1)*sc,r:(e.textRotation||0)+Math.atan2(M[1],M[0]),ha:'left',va:'top',ml:1})}}
+          if(e.hasBlock&&e.blockContentId){const b=blocksH.get(e.blockContentId);if(b&&depth<12)(b.entities||[]).forEach(x=>add(x,M,L,c,depth+1))}
+          break}
+        case 'ACAD_TABLE':{const b=blocksH.get(e.blockRecordHandle);if(b&&depth<12)(b.entities||[]).forEach(x=>add(x,M,L,c,depth+1));break}
         case 'INSERT':case 'DIMENSION':{
           if(depth>12)break;const b=blocks.get(e.name);if(!b)break;
           if(e.type==='INSERT'){
@@ -1592,6 +1607,9 @@ body.noscroll{overflow:hidden}
       }
     }
     for(const e of ents){try{add(e,M0,null,null,0)}catch(err){}}
+    // rien dans l'espace objet : on prend les présentations (plan dessiné dans l'espace papier)
+    if(!items.length&&model){const own=new Set([...blocks.values()].filter(b=>/^\*paper_space/i.test(b.name)).map(b=>b.handle));
+      for(const e of db.entities)if(own.has(e.ownerBlockRecordSoftId)&&e.type!=='VIEWPORT'){try{add(e,M0,null,null,0)}catch(err){}}}
     /* Emprise : on écarte les objets égarés très loin du dessin (fréquents dans les DWG) */
     const boxes=items.map(it=>{if(it.k==='t')return [it.x,it.y,it.x+it.h*it.s.length*.6,it.y+it.h];
       let a=Infinity,b=Infinity,c=-Infinity,d=-Infinity;
@@ -1610,9 +1628,14 @@ body.noscroll{overflow:hidden}
     const ext=Math.max(bx1-bx0,by1-by0);
     return {layers,items,box:[bx0,by0,bx1,by1],m:u||(ext>30000?.001:ext>800?.01:1),mGuess:!u};
   }
+  // DWG de R13 à 2018 : le format 2018 (AC1032) est toujours celui d'AutoCAD 2026.
+  // Un lecteur neuf par fichier : relire un 2e fichier avec le même lecteur le fait planter.
   async function readDwg(file){
-    const {L,m}=await dwgLib();
-    const d=L.dwg_read_data(await file.arrayBuffer(),m.Dwg_File_Type.DWG);
+    const buf=await file.arrayBuffer(),v=new TextDecoder().decode(new Uint8Array(buf,0,Math.min(6,buf.byteLength)));
+    if(/^(AC10(0\d|1[01])|MC0\.0|AC[12]\.)/.test(v)){const x=new Error('old');x.old=v;throw x}
+    if(!/^AC1\d{3}$/.test(v))throw new Error('pas un DWG');
+    const {m,b}=await dwgLib(),L=await m.LibreDwg.create(b+'wasm');
+    const d=L.dwg_read_data(buf,m.Dwg_File_Type.DWG);
     if(!d)throw new Error('dwg');
     try{return dwgToDrawing(L.convert(d))}finally{try{L.dwg_free(d)}catch(e){}}
   }
@@ -1898,7 +1921,7 @@ body.noscroll{overflow:hidden}
     const pid=state.current,t=curTravail();if(!pid||!t)return;
     const ok=[...files].filter(f=>f.type.startsWith('image/')||f.type==='application/pdf'||/\.(pdf|png|jpe?g|gif|webp)$/i.test(f.name)||isDwg(f));
     for(const f of ok)if(!f.type&&/\.pdf$/i.test(f.name))Object.defineProperty(f,'type',{value:'application/pdf'});
-    const refused=files.length-ok.length,bad=[];let libErr=false;
+    const refused=files.length-ok.length,bad=[],old=[],empty=[];let libErr=false;
     errEl.hidden=!refused;errEl.textContent=refused?refused+' fichier(s) ignoré(s) : seuls les images, les PDF et les DWG sont acceptés.':'';
     try{
       for(const f of ok){
@@ -1907,13 +1930,16 @@ body.noscroll{overflow:hidden}
           // DWG : converti une fois à l'ajout (le lecteur se télécharge au premier DWG)
           errEl.hidden=false;errEl.textContent='Lecture du DWG « '+f.name+' »…';
           try{rec.dwg=await readDwg(f);rec.type='application/acad';if(!rec.dwg.items.length)throw new Error('vide')}
-          catch(e){if(e&&e.lib){libErr=true;console.error(e.cause||e)}else bad.push(f.name);continue}
+          catch(e){if(e&&e.lib){libErr=true;console.error(e.cause||e)}else if(e&&e.old)old.push(f.name);else if(e&&e.message==='vide')empty.push(f.name);else{console.error(e);bad.push(f.name)}continue}
           finally{errEl.hidden=!refused;errEl.textContent=refused?refused+' fichier(s) ignoré(s) : seuls les images, les PDF et les DWG sont acceptés.':''}
         }
         await addPlan(rec);
       }
       if(libErr){errEl.hidden=false;errEl.textContent='Le lecteur DWG n\'a pas pu se charger dans ce navigateur (connexion ou navigateur trop ancien). Réessayez après avoir rechargé la page (Ctrl+F5).'}
-      else if(bad.length){errEl.hidden=false;errEl.textContent='Impossible de lire ce DWG : '+bad.join(', ')+' (fichier abîmé ou version non prise en charge). Essayez de l\'enregistrer en DWG 2018 ou plus ancien, ou exportez-le en PDF.'}
+      else if(bad.length||old.length||empty.length){errEl.hidden=false;errEl.textContent=[
+        bad.length&&'Impossible de lire : '+bad.join(', ')+' (fichier abîmé ou objet non pris en charge). Dans AutoCAD, faites « Enregistrer sous » DWG pour réécrire le fichier, ou exportez le plan en PDF.',
+        old.length&&old.join(', ')+' : DWG trop ancien (avant AutoCAD R13). Réenregistrez-le dans une version récente.',
+        empty.length&&empty.join(', ')+' : aucun objet lisible (seulement des objets 3D, Civil 3D ou des points). Exportez le plan en PDF.'].filter(Boolean).join(' ')}
     }catch(e){errEl.hidden=false;errEl.textContent='Impossible d\'enregistrer le plan dans ce navigateur (stockage indisponible ou plein).'}
     renderPlans();
   }
