@@ -256,7 +256,13 @@ main p{color:var(--muted);margin:6px 0 0}
 .leg-view .msg{color:var(--muted);font-size:13px;line-height:1.5}
 .view{position:relative}
 .pane-h .grow{flex:1}
-.full-btn{display:inline-flex;align-items:center;gap:5px}
+.full-btn,.dl-btn{display:inline-flex;align-items:center;gap:5px}
+.dl-btn svg{width:13px;height:13px}
+.dl{position:relative;display:inline-flex}
+.dl-menu{position:absolute;top:calc(100% + 4px);right:0;z-index:20;display:flex;flex-direction:column;min-width:130px;background:var(--white);border:1px solid var(--side-line);border-radius:6px;box-shadow:0 6px 20px rgba(28,37,48,.15);padding:4px;text-transform:none;letter-spacing:0}
+.dl-menu[hidden]{display:none}
+.dl-menu button{border:0;background:none;text-align:left;padding:7px 10px;border-radius:4px;font-size:13px;cursor:pointer;color:var(--ink)}
+.dl-menu button:hover{background:var(--accent-tint);color:var(--accent)}
 .full-btn svg{width:13px;height:13px}
 .pane.full{position:fixed;inset:0;z-index:1000;background:var(--white);padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 .pane.full .view{flex:1;aspect-ratio:auto;width:100%;min-height:0}
@@ -365,6 +371,7 @@ body.noscroll{overflow:hidden}
   const ROT_L='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.34-5.66"/><path d="M4 4v5h5"/></svg>';
   const CHEV='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
   const FULL='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
+  const DL='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg>';
   const EXIT='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>';
   let confirmId=null;
   const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -507,6 +514,8 @@ body.noscroll{overflow:hidden}
             <div class="pane-h"><b>Aperçu</b><span class="grow"></span>
               <button class="sm ocg-btn" hidden title="Afficher ou masquer la liste des calques pour geler ceux que vous ne voulez pas">Calques</button>
               <button class="sm excl-pick" title="Tracer sur le plan une zone à ne pas compter (partie de vue en double, cartouche…)">Exclure une zone</button>
+              <span class="dl"><button class="sm dl-btn" title="Télécharger l'aperçu du plan (plan entier, avec calques gelés, rotation et zones mises en avant)">${DL} Télécharger</button>
+                <span class="dl-menu" hidden><button data-f="jpg">Image JPG</button><button data-f="pdf">PDF</button></span></span>
               <button class="sm full-btn" title="Afficher le plan en plein écran (Échap pour quitter)">${FULL} Plein écran</button></div>
             <div class="view"><span class="msg">Chargement du plan…</span></div>
             <div class="pager" hidden><button class="sm pg-prev" title="Page précédente">‹</button><b></b><button class="sm pg-next" title="Page suivante">›</button><small>Molette sur le plan : zoom</small></div>
@@ -548,6 +557,7 @@ body.noscroll{overflow:hidden}
         addPlan(r).catch(()=>{});api.redraw();legend.render();
       });
       const fs=setupFullscreen(box.querySelector('.pane'),box.querySelector('.full-btn'),api);
+      setupDownload(r,box.querySelector('.dl'),api);
       if(dwg)setupLayers(r,box,api,legend,fs);   // liste des calques : DWG seulement
     });
   }
@@ -607,6 +617,41 @@ body.noscroll{overflow:hidden}
     btn.onclick=()=>{pane.classList.toggle('ocg-on');if(fs.on())requestAnimationFrame(()=>api.redraw())};
   }
 
+  /* ---- Téléchargement de l'aperçu : plan entier tel qu'affiché (calques gelés, rotation, mise en avant,
+     zones exclues), en image JPG ou en PDF d'une page (taille de la page d'origine pour un PDF, A3 sinon). ---- */
+  function setupDownload(r,el,api){
+    const btn=el.querySelector('.dl-btn'),menu=el.querySelector('.dl-menu');
+    btn.onclick=e=>{e.stopPropagation();menu.hidden=!menu.hidden};
+    document.addEventListener('pointerdown',e=>{if(!menu.hidden&&!el.contains(e.target))menu.hidden=true});
+    menu.querySelectorAll('button').forEach(b=>b.onclick=async()=>{
+      menu.hidden=true;const lab=btn.innerHTML;btn.disabled=true;btn.textContent='Préparation…';
+      try{
+        const {canvas:cv,pt}=await api.full(6000);
+        const blob=await new Promise(res=>cv.toBlob(res,'image/jpeg',.92));if(!blob)throw new Error('jpeg');
+        const base=(r.name||'plan').replace(/\.[^.]+$/,'')+(api.pages()>1?' - page '+api.page():'');
+        if(b.dataset.f==='jpg')saveAs(blob,base+'.jpg');
+        else{let [W,H]=pt||[cv.width,cv.height];const k=1190.55/Math.max(W,H);if(!pt){W*=k;H*=k}   // A3 : 420 mm
+          saveAs(jpegPdf(new Uint8Array(await blob.arrayBuffer()),cv.width,cv.height,W,H),base+'.pdf')}
+      }catch(e){console.error(e);alert('Impossible de préparer le téléchargement de ce plan (plan trop lourd pour ce navigateur ?).')}
+      finally{btn.disabled=false;btn.innerHTML=lab}});
+  }
+  const saveAs=(blob,name)=>{const a=document.createElement('a'),u=URL.createObjectURL(blob);a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),30000)};
+  // PDF d'une page contenant une image JPEG (w×h pixels) sur une page de W×H points
+  function jpegPdf(jpg,w,h,W,H){
+    const enc=new TextEncoder(),parts=[],offs=[];let len=0;
+    const push=x=>{const b=typeof x==='string'?enc.encode(x):x;parts.push(b);len+=b.length};
+    const obj=(i,body,stream)=>{offs[i]=len;push(i+' 0 obj\n'+body);if(stream){push('\nstream\n');push(stream);push('\nendstream')}push('\nendobj\n')};
+    const f=v=>(+v).toFixed(2),draw='q '+f(W)+' 0 0 '+f(H)+' 0 0 cm /Im0 Do Q';
+    push('%PDF-1.4\n%\xe2\xe3\xcf\xd3\n');
+    obj(1,'<</Type/Catalog/Pages 2 0 R>>');
+    obj(2,'<</Type/Pages/Kids[3 0 R]/Count 1>>');
+    obj(3,'<</Type/Page/Parent 2 0 R/MediaBox[0 0 '+f(W)+' '+f(H)+']/Resources<</XObject<</Im0 4 0 R>>>>/Contents 5 0 R>>');
+    obj(4,'<</Type/XObject/Subtype/Image/Width '+w+'/Height '+h+'/ColorSpace/DeviceRGB/BitsPerComponent 8/Filter/DCTDecode/Length '+jpg.length+'>>',jpg);
+    obj(5,'<</Length '+draw.length+'>>',enc.encode(draw));
+    const x=len;push('xref\n0 6\n0000000000 65535 f \n'+offs.slice(1).map(o=>String(o).padStart(10,'0')+' 00000 n \n').join(''));
+    push('trailer\n<</Size 6/Root 1 0 R>>\nstartxref\n'+x+'\n%%EOF\n');
+    return new Blob(parts,{type:'application/pdf'});
+  }
   /* ---- Plein écran de l'aperçu : panneau étendu à toute la fenêtre (+ vrai plein écran si le navigateur l'autorise) ---- */
   function setupFullscreen(pane,btn,api){
     let on=false,cbs=[];
@@ -1433,6 +1478,7 @@ body.noscroll{overflow:hidden}
     return {
       zoom:()=>z.k,
       setRaw:c=>{raw=c;show()},
+      finish:c=>{const cv=highlight(c,filter);if(overlay)overlay(cv);return cv},   // export : mêmes réglages que l'aperçu
       setOverlay:f=>{overlay=f;show()},
       setFilter:cols=>{const s=JSON.stringify(cols);if(s===JSON.stringify(filter))return;filter=cols;
         if(!queued){queued=true;requestAnimationFrame(show)}}
@@ -1452,6 +1498,8 @@ body.noscroll{overflow:hidden}
     });
     img.src=url;
     return {redraw:draw,page:()=>1,pages:()=>1,setFilter:pres.setFilter,setOverlay:pres.setOverlay,
+      full:async maxPx=>{await loaded;const k=Math.min(1,maxPx/Math.max(img.naturalWidth,img.naturalHeight));
+        return {canvas:pres.finish(rotated(img,img.naturalWidth*k,img.naturalHeight*k,r.rot||0))}},
       crop:async rect=>{await loaded;return cropTo(img,img.naturalWidth,img.naturalHeight,rect,r.rot||0)},
       source:async()=>{await loaded;
         const k=Math.min(1,1500/Math.max(img.naturalWidth,img.naturalHeight));
@@ -1851,6 +1899,7 @@ body.noscroll{overflow:hidden}
       for(const it of D.items)if(!off.has(it.l)&&!hit.has(it.l)&&dHit(it,X,Y,tol))hit.add(it.l);
       api.markLayers(hit.size?new Set([...hit].map(i=>D.layers[i].name)):null)});
     return api={redraw:draw,page:()=>1,pages:()=>1,setFilter:pres.setFilter,setOverlay:pres.setOverlay,
+      full:async maxPx=>{const s=drawDwg(D,hidden(),null,maxPx,hl());return {canvas:pres.finish(r.rot?rotated(s.canvas,s.canvas.width,s.canvas.height,r.rot):s.canvas)}},
       crop:async(rect,marks)=>{const s=drawDwg(D,hidden(),rect,1600);
         if(marks&&marks.length){   // lignes de légende reconnues : cadre numéroté
           const R=dRect(D,rect),cv=s.canvas,g=cv.getContext('2d'),W=cv.width,H=cv.height,u=Math.max(W,H)/400;
@@ -1883,6 +1932,11 @@ body.noscroll{overflow:hidden}
     const rnd=async(page,ctx,vp)=>{await ocP;
       return page.render(oc?{canvasContext:ctx,viewport:vp,optionalContentConfigPromise:Promise.resolve(oc)}:{canvasContext:ctx,viewport:vp}).promise};
     const api={redraw:()=>draw(),page:()=>n,pages:()=>doc?doc.numPages:1,setFilter:pres.setFilter,setOverlay:pres.setOverlay,
+      full:async maxPx=>{const d=await docP,page=await d.getPage(n),rotation=((page.rotate||0)+(r.rot||0))%360,base=page.getViewport({scale:1,rotation});
+        const scale=Math.min(maxPx/Math.max(base.width,base.height),Math.sqrt(40e6/(base.width*base.height)));
+        const vp=page.getViewport({scale,rotation}),cv=document.createElement('canvas');cv.width=Math.round(vp.width);cv.height=Math.round(vp.height);
+        const g=cv.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,cv.width,cv.height);await rnd(page,g,vp);
+        return {canvas:pres.finish(cv),pt:[base.width,base.height]}},
       crop:async rect=>{
         const d=await docP;const page=await d.getPage(Math.min(rect.page||1,d.numPages));
         const rotation=page.rotate||0;const base=page.getViewport({scale:1,rotation});
