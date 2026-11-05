@@ -853,7 +853,7 @@ body.noscroll{overflow:hidden}
        une ligne par échantillon de la légende, métré sur les objets du plan identiques (calques gelés exclus). */
     let dwgLeg={k:null,E:null},legTok=0;
     // Lignes de la légende DWG encadrée (recalculées si la zone, les zones exclues ou les calques gelés changent) ; vrai si recalculées
-    const legOff=()=>new Set(r.dwg.layers.map((L,i)=>((r.ocg||{})[L.name]??L.on)?-1:i).filter(i=>i>=0));
+    const legOff=()=>new Set(r.dwg.layers.map((L,i)=>((r.ocg||{})[L.name]??true)?-1:i).filter(i=>i>=0));
     const legKey=()=>JSON.stringify([r.legend2,r.excl||[],[...legOff()]]);
     const legFresh=()=>!!r.dwg&&!!r.legend2&&dwgLeg.k===legKey();
     function legDwg(){const D=r.dwg,ck=legKey();
@@ -1877,7 +1877,8 @@ body.noscroll{overflow:hidden}
     const pres=presenter(view,r.name,async(win,pw,ph)=>{const rot=r.rot||0,a=toUnrot(win.x,win.y,rot),b=toUnrot(win.x+win.w,win.y+win.h,rot);
       const s=drawDwg(D,hidden(),{x:Math.min(a[0],b[0]),y:Math.min(a[1],b[1]),w:Math.abs(a[0]-b[0]),h:Math.abs(a[1]-b[1])},Math.max(pw,ph),hl());
       return rot?rotated(s.canvas,s.canvas.width,s.canvas.height,rot):s.canvas});
-    const hidden=()=>{const o=r.ocg||{};return new Set(D.layers.map((L,i)=>(o[L.name]??L.on)?-1:i).filter(i=>i>=0))};
+    // tous les calques sont affichés d'office, même ceux éteints ou gelés dans le DWG : seuls les gels faits dans la liste comptent
+    const hidden=()=>{const o=r.ocg||{};return new Set(D.layers.map((L,i)=>(o[L.name]??true)?-1:i).filter(i=>i>=0))};
     // calques cochés dans la légende automatique, avec leur contraste (curseur -100…+100 → 0,2…3)
     // lignes cochées de la légende automatique (calques « L: », ou éléments d'une ligne de légende « D: »)
     const hl=()=>{const ctr=r.contrast||{},fac=k=>{const v=ctr[k]||0;return v>=0?1+v/50:1+v/125};
@@ -1888,7 +1889,7 @@ body.noscroll{overflow:hidden}
       if(mm&&!IM.size)mm.forEach(S=>S.forEach(it=>IM.set(it,1)));   // aucune ligne cochée : toutes les zones de la légende ressortent
       if(!LM.size&&!IM.size)return null;return it=>IM.get(it)??LM.get(it.l)??0};
     const draw=()=>{const s=drawDwg(D,hidden(),null,3000,hl());pres.setRaw(r.rot?rotated(s.canvas,s.canvas.width,s.canvas.height,r.rot):s.canvas)};
-    const list=()=>D.layers.map((L,i)=>({id:L.name,name:L.name,visible:(r.ocg||{})[L.name]??L.on,c:L.c})).filter((g,i)=>D.items.some(it=>it.l===i));
+    const list=()=>D.layers.map((L,i)=>({id:L.name,name:L.name,visible:(r.ocg||{})[L.name]??true,c:L.c})).filter((g,i)=>D.items.some(it=>it.l===i));
     setTimeout(()=>{try{draw()}catch(e){view.innerHTML='<span class="msg">Impossible d\'afficher ce DWG.</span>'}});
     // clic (sans glisser) sur un objet du plan : ses calques remontent en tête de la liste des calques
     let api,down=null;
